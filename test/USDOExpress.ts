@@ -958,6 +958,13 @@ describe('USDOExpress', function () {
   });
 
   describe('AssetRegistry Integration', function () {
+    it('should reject initialization with zero admin', async function () {
+      const AssetRegistryFactory = await ethers.getContractFactory('AssetRegistry');
+      await expect(
+        upgrades.deployProxy(AssetRegistryFactory, [ethers.constants.AddressZero], { initializer: 'initialize' }),
+      ).to.be.revertedWithCustomError(AssetRegistryFactory, 'AssetRegistryZeroAddress');
+    });
+
     it('should correctly configure supported assets', async function () {
       const usdcConfig = await assetRegistry.getAssetConfig(usdc.address);
       expect(usdcConfig.asset).to.equal(usdc.address);
