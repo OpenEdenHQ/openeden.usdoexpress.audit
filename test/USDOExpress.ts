@@ -495,9 +495,9 @@ describe('USDOExpress', function () {
       // Mint USDO for the user
       await usdo.mint(whitelistedUser.address, redeemAmount);
 
-      // Add USDC to the contract for redemption (this is what the user will receive)
+      // Add USDC to the redemption contract for redemption (this is what the user will receive)
       const usdcNeeded = await usdoExpress.convertToUnderlying(usdc.address, redeemAmount);
-      await usdc.transfer(usdoExpress.address, usdcNeeded);
+      await usdc.transfer(simpleRedemption.address, usdcNeeded);
 
       const initialUserUsdcBalance = await usdc.balanceOf(whitelistedUser.address);
       const initialFeeToBalance = await usdc.balanceOf(feeTo.address);
@@ -537,9 +537,9 @@ describe('USDOExpress', function () {
       // Mint USDO for the user
       await usdo.mint(whitelistedUser.address, redeemAmount);
 
-      // Add USDC to the contract for redemption
+      // Add USDC to the redemption contract for redemption
       const usdcNeeded = await usdoExpress.convertToUnderlying(usdc.address, redeemAmount);
-      await usdc.transfer(usdoExpress.address, usdcNeeded);
+      await usdc.transfer(simpleRedemption.address, usdcNeeded);
 
       // Calculate expected fee using instant redeem rate
       const expectedFee = usdcNeeded.mul(instantRedeemFeeRate).div(1e4);
