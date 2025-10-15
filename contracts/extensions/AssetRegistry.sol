@@ -150,7 +150,7 @@ contract AssetRegistry is IAssetRegistry, UUPSUpgradeable, AccessControlUpgradea
 
         // Scale down from USDO decimals to asset decimals with proper rounding
         uint256 divisor = 10 ** (_USDO_DECIMALS - assetDecimals);
-        uint256 amount = usdoAmount.mulDiv(1, divisor, MathUpgradeable.Rounding.Up);
+        uint256 amount = usdoAmount.mulDiv(1, divisor, MathUpgradeable.Rounding.Down);
 
         // If asset has price feed, convert from USD value
         if (config.priceFeed != address(0)) {
