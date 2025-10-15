@@ -5,12 +5,12 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol";
-import "./USDOExpressPausable.sol";
+import "../USDOExpressPausable.sol";
 import "./USDOMintRedeemLimiter.sol";
 
-import {IUSDO} from "../interfaces/IUSDO.sol";
-import {ITBILL} from "../interfaces/ITBILL.sol";
-import {IBuidlRedemption, IBuidlSettlement} from "../interfaces/IBuidlRedemption.sol";
+import {IUSDO} from "../../interfaces/IUSDO.sol";
+import {ITBILL} from "../../interfaces/ITBILL.sol";
+import {IBuidlRedemption, IBuidlSettlement} from "../../interfaces/IBuidlRedemption.sol";
 
 enum TxType {
     MINT,

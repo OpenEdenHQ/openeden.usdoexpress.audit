@@ -7,7 +7,7 @@ import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/acce
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol";
 import "./USDOExpressPausable.sol";
-import "./USDOMintRedeemLimiter.sol";
+import "./USDOMintRedeemLimiterV2.sol";
 import "./DoubleQueueModified.sol";
 
 import {IUSDO} from "../interfaces/IUSDO.sol";
@@ -193,7 +193,6 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         _assetRegistry = IAssetRegistry(assetRegistry);
 
         __USDOMintRedeemLimiter_init(
-            cfg.totalSupplyCap,
             cfg.mintMinimum,
             cfg.mintLimit,
             cfg.mintDuration,
@@ -424,7 +423,7 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
             }
 
             // Mint USDO back to the user
-            _safeMintInternal(sender, usdoAmt);
+            _usdo.mint(sender, usdoAmt);
             emit ProcessRedemptionCancel(sender, receiver, usdoAmt, prevId);
         }
         emit Cancel(originalLen, totalUsdo);
@@ -657,14 +656,6 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
     /*//////////////////////////////////////////////////////////////
                     USDOMintRedeemLimiter functions
     //////////////////////////////////////////////////////////////*/
-
-    /**
-     * @notice Set the total supply cap.
-     */
-    function setTotalSupplyCap(uint256 totalSupplyCap) external onlyRole(MAINTAINER_ROLE) {
-        _setTotalSupplyCap(totalSupplyCap);
-    }
-
     /**
      * @notice Set the mint minimum in USDC/TBILL.
      * @dev with 6 decimals
@@ -767,18 +758,6 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
     }
 
     /**
-     * @notice Mint USDO to the user.
-     * @dev This function is used to mint USDO to the user.
-     * @param to The address to mint USDO to.
-     * @param amt The amount of USDO to mint.
-     */
-    function _safeMintInternal(address to, uint256 amt) internal {
-        if (_usdo.totalSupply() + amt > _totalSupplyCap) revert TotalSupplyCapExceeded();
-
-        _usdo.mint(to, amt);
-    }
-
-    /**
      * @notice Allows a whitelisted user to perform an instant mint.
      * @param underlying The address of the token to mint USDO from.
      * @param to The address to mint the USDO to.
@@ -807,7 +786,7 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         if (fee > 0) SafeERC20Upgradeable.safeTransferFrom(IERC20Upgradeable(underlying), from, _feeTo, fee);
         SafeERC20Upgradeable.safeTransferFrom(IERC20Upgradeable(underlying), from, address(_treasury), netAmt);
 
-        _safeMintInternal(to, usdoAmtCurr);
+        _usdo.mint(to, usdoAmtCurr);
         return (usdoAmtCurr, fee);
     }
 }

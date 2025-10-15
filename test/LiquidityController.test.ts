@@ -251,9 +251,10 @@ describe('LiquidityController', function () {
     });
 
     it('Should revert on zero amount restoration', async function () {
-      await expect(
-        liquidityController.restoreLiquidity(user1.address, 0),
-      ).to.be.revertedWithCustomError(liquidityController, 'ZeroAmount');
+      await expect(liquidityController.restoreLiquidity(user1.address, 0)).to.be.revertedWithCustomError(
+        liquidityController,
+        'ZeroAmount',
+      );
     });
   });
 

@@ -861,9 +861,9 @@ describe('USDOExpress', function () {
     });
 
     it('should fail to mint more than cap', async function () {
-      // Set a low cap that would be exceeded by the mint
+      // V2: Set cap on USDO token (not USDOExpressV2) as the check is now centralized in USDO
       const lowCap = ethers.utils.parseUnits('500', 18); // 500 USDO
-      await usdoExpress.connect(maintainer).setTotalSupplyCap(lowCap);
+      await usdo.updateTotalSupplyCap(lowCap);
       await usdc.connect(whitelistedUser).approve(usdoExpress.address, mintAmount);
 
       // Calculate how much USDO would be minted
@@ -872,16 +872,16 @@ describe('USDOExpress', function () {
       // Verify the mint would exceed the cap
       expect(usdoAmtCurr).to.be.gt(lowCap);
 
-      // Attempt to mint should fail
+      // V2: Attempt to mint should fail with error from USDO contract
       await expect(
         usdoExpress.connect(whitelistedUser).instantMint(usdc.address, whitelistedUser.address, mintAmount),
-      ).to.be.revertedWithCustomError(usdoExpress, 'TotalSupplyCapExceeded');
+      ).to.be.revertedWithCustomError(usdo, 'USDOExceedsTotalSupplyCap');
     });
 
     it('should allow minting up to cap', async function () {
-      // Set a cap that would allow the mint
+      // V2: Set cap on USDO token (not USDOExpressV2)
       const cap = ethers.utils.parseUnits('2000', 18); // 2000 USDO
-      await usdoExpress.connect(maintainer).setTotalSupplyCap(cap);
+      await usdo.updateTotalSupplyCap(cap);
 
       // Calculate how much USDO would be minted
       const { usdoAmtCurr } = await usdoExpress.previewMint(usdc.address, mintAmount);
@@ -892,7 +892,7 @@ describe('USDOExpress', function () {
       // Attempt to mint should succeed
       await expect(
         usdoExpress.connect(whitelistedUser).instantMint(usdc.address, whitelistedUser.address, mintAmount),
-      ).to.not.be.revertedWithCustomError(usdoExpress, 'TotalSupplyCapExceeded');
+      ).to.not.be.revertedWithCustomError(usdo, 'USDOExceedsTotalSupplyCap');
     });
 
     it('should fail to mint less than first deposit', async function () {
