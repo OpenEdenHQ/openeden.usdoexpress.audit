@@ -104,12 +104,11 @@ contract LiquidityController is OwnableUpgradeable, UUPSUpgradeable {
                 authorizedUsers[user] = true;
             }
         } else {
-            // Removing quota - also clear used quota
-            authorizedUsers[user] = false;
+            // Removing quota - require no active usage
             if (usedQuota > 0) {
-                totalUsed = totalUsed - usedQuota;
-                usedQuotas[user] = 0;
+                revert QuotaExceedsUsed(0, usedQuota);
             }
+            authorizedUsers[user] = false;
         }
 
         userQuotas[user] = quota;

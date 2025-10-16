@@ -420,16 +420,37 @@ describe('LiquidityController', function () {
       expect(used).to.equal(reserveAmount);
     });
 
-    it('Should restore used amount when removing quota', async function () {
+    it('Should prevent quota removal when user has active usage', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
       const reserveAmount = ethers.utils.parseEther('30000');
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
 
-      // Remove quota
+      // Attempt to remove quota should fail due to active usage
+      await expect(liquidityController.setUserQuota(user1.address, 0))
+        .to.be.revertedWithCustomError(liquidityController, 'QuotaExceedsUsed');
+
+      // Quota and usage should remain unchanged
+      expect(await liquidityController.usedQuotas(user1.address)).to.equal(reserveAmount);
+      expect(await liquidityController.totalUsed()).to.equal(reserveAmount);
+      expect(await liquidityController.userQuotas(user1.address)).to.equal(USER1_QUOTA);
+    });
+
+    it('Should allow quota removal after restoring liquidity first', async function () {
+      await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
+      const reserveAmount = ethers.utils.parseEther('30000');
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
+
+      // Step 1: Restore liquidity first (simulating returned liquidity)
+      await liquidityController.restoreLiquidity(user1.address, reserveAmount);
+
+      // Step 2: Now quota removal should work
       await liquidityController.setUserQuota(user1.address, 0);
 
+      // Verify final state
       expect(await liquidityController.usedQuotas(user1.address)).to.equal(0);
       expect(await liquidityController.totalUsed()).to.equal(0);
+      expect(await liquidityController.userQuotas(user1.address)).to.equal(0);
+      expect(await liquidityController.authorizedUsers(user1.address)).to.be.false;
     });
 
     it('Should handle sequential reservations that exhaust quota', async function () {
@@ -763,7 +784,7 @@ describe('LiquidityController', function () {
       expect(await liquidityController.usedQuotas(user3.address)).to.equal(ethers.utils.parseEther('25000'));
     });
 
-    it('Should handle quota removal for one user without affecting others', async function () {
+    it('Should handle quota removal with proper restoration workflow', async function () {
       // Reserve for all users
       await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('40000'));
       await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('80000'));
@@ -771,7 +792,10 @@ describe('LiquidityController', function () {
 
       const totalUsedBefore = await liquidityController.totalUsed();
 
-      // Remove user2's quota
+      // Step 1: Restore user2's liquidity first (simulating returned liquidity)
+      await liquidityController.restoreLiquidity(user2.address, ethers.utils.parseEther('80000'));
+
+      // Step 2: Now remove user2's quota
       await liquidityController.setUserQuota(user2.address, 0);
 
       // Verify user2 is cleared
@@ -783,7 +807,7 @@ describe('LiquidityController', function () {
       expect(await liquidityController.usedQuotas(user1.address)).to.equal(ethers.utils.parseEther('40000'));
       expect(await liquidityController.usedQuotas(user3.address)).to.equal(ethers.utils.parseEther('20000'));
 
-      // Total used should decrease by user2's usage
+      // Total used should have decreased by user2's usage due to restoreLiquidity(), not quota removal
       expect(await liquidityController.totalUsed()).to.equal(totalUsedBefore.sub(ethers.utils.parseEther('80000')));
     });
 
