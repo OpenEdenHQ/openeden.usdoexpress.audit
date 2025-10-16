@@ -426,8 +426,10 @@ describe('LiquidityController', function () {
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
 
       // Attempt to remove quota should fail due to active usage
-      await expect(liquidityController.setUserQuota(user1.address, 0))
-        .to.be.revertedWithCustomError(liquidityController, 'QuotaExceedsUsed');
+      await expect(liquidityController.setUserQuota(user1.address, 0)).to.be.revertedWithCustomError(
+        liquidityController,
+        'QuotaExceedsUsed',
+      );
 
       // Quota and usage should remain unchanged
       expect(await liquidityController.usedQuotas(user1.address)).to.equal(reserveAmount);

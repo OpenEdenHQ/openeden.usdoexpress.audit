@@ -126,7 +126,8 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         uint256 fee,
         uint256 payout,
         uint256 usycFee,
-        int256 price
+        int256 price,
+        uint256 minUsdcOut
     );
     event ManualRedeem(address indexed from, uint256 reqAmt, uint256 receiveAmt, uint256 fee);
     event UpdateFirstDeposit(address indexed account, bool flag);
@@ -159,6 +160,7 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
     error USDOExpressNotInKycList(address from, address to);
     error USDOExpressInvalidInput(uint256 input);
     error USDOExpressInsufficientLiquidity(uint256 required, uint256 available);
+    error InsufficientOutput(uint256 received, uint256 minimum);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -336,12 +338,13 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
     }
 
     /**
-     * @notice Allows a whitelisted user to perform an instant redeem using BUIDL.
-     * @dev Will convert USDO to USDC using BUIDL redemption.
+     * @notice Allows a whitelisted user to perform an instant redeem with slippage protection.
+     * @dev Will convert USDO to USDC using the configured redemption contract.
      * @param to The address to redeem the USDC to.
      * @param amt The requested amount of USDO to redeem.
+     * @param minUsdcOut Minimum USDC amount to receive (slippage protection).
      */
-    function instantRedeemSelf(address to, uint256 amt) external whenNotPausedRedeem {
+    function instantRedeemSelf(address to, uint256 amt, uint256 minUsdcOut) external whenNotPausedRedeem {
         address from = _msgSender();
         if (!_kycList[from] || !_kycList[to]) revert USDOExpressNotInKycList(from, to);
         _checkRedeemLimit(amt);
@@ -352,16 +355,23 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         // 2. calculate the USDO amount into USDC and request redemption
         uint256 usdcNeeded = convertToUnderlying(_usdc, amt);
 
-        // 3. redeem through the redemption contract (handles fees and rounding internally)
-        (uint256 payout, uint256 usycFee, int256 price) = _redemptionContract.redeemFor(from, usdcNeeded);
+        // 3. redeem through the redemption contract and process
+        {
+            (uint256 payout, uint256 redemptionFee, int256 price) = _redemptionContract.redeemFor(from, usdcNeeded);
 
-        // 4. calculate fees
-        uint256 feeInUsdc = txsFee(usdcNeeded, TxType.INSTANT_REDEEM);
-        uint256 usdcToUser = payout - feeInUsdc;
+            // 4. calculate fees
+            uint256 feeInUsdc = txsFee(usdcNeeded, TxType.INSTANT_REDEEM);
+            uint256 usdcToUser = payout - feeInUsdc;
 
-        // 5. transfer USDC fee to feeTo and the rest to user
-        _distributeUsdc(to, usdcToUser, feeInUsdc);
-        emit InstantRedeem(from, to, amt, usdcToUser, feeInUsdc, payout, usycFee, price);
+            // 5. slippage protection
+            if (minUsdcOut > 0 && usdcToUser < minUsdcOut) {
+                revert InsufficientOutput(usdcToUser, minUsdcOut);
+            }
+
+            // 6. transfer USDC fee to feeTo and the rest to user
+            _distributeUsdc(to, usdcToUser, feeInUsdc);
+            emit InstantRedeem(from, to, amt, usdcToUser, feeInUsdc, payout, redemptionFee, price, minUsdcOut);
+        }
     }
 
     /**
@@ -568,7 +578,7 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
 
             // Calculate USDOExpress fee in USDC
             feeAmt = convertToUnderlying(_usdc, feeInUsdo);
-            
+
             // Redemption contract fee (extraFee)
             extraFee = redemptionFee;
 

@@ -502,8 +502,8 @@ describe('USDOExpress', function () {
       const initialUserUsdcBalance = await usdc.balanceOf(whitelistedUser.address);
       const initialFeeToBalance = await usdc.balanceOf(feeTo.address);
 
-      // Perform instant redeem
-      await expect(usdoExpress.connect(whitelistedUser).instantRedeemSelf(whitelistedUser.address, redeemAmount))
+      // Perform instant redeem with no slippage protection (minUsdcOut = 0)
+      await expect(usdoExpress.connect(whitelistedUser).instantRedeemSelf(whitelistedUser.address, redeemAmount, 0))
         .to.emit(usdoExpress, 'InstantRedeem')
         .withArgs(
           whitelistedUser.address,
@@ -514,6 +514,7 @@ describe('USDOExpress', function () {
           anyValue, // payout
           anyValue, // usycFee
           anyValue, // price
+          0, // minUsdcOut
         );
 
       // Check that user received USDC (minus fee)
@@ -546,7 +547,7 @@ describe('USDOExpress', function () {
 
       const initialFeeToBalance = await usdc.balanceOf(feeTo.address);
 
-      await usdoExpress.connect(whitelistedUser).instantRedeemSelf(whitelistedUser.address, redeemAmount);
+      await usdoExpress.connect(whitelistedUser).instantRedeemSelf(whitelistedUser.address, redeemAmount, 0);
 
       const finalFeeToBalance = await usdc.balanceOf(feeTo.address);
       const feeCollected = finalFeeToBalance.sub(initialFeeToBalance);
@@ -557,6 +558,86 @@ describe('USDOExpress', function () {
       // Verify it's different from what the regular redeem fee would have been
       const regularRedeemFee = usdcNeeded.mul(redeemFeeRate).div(1e4);
       expect(feeCollected).to.not.equal(regularRedeemFee);
+    });
+
+    it('should allow instant redeem with slippage protection when minUsdcOut is met', async function () {
+      // Mint USDO for the user
+      await usdo.mint(whitelistedUser.address, redeemAmount);
+
+      // Add USDC to the redemption contract for redemption
+      const usdcNeeded = await usdoExpress.convertToUnderlying(usdc.address, redeemAmount);
+      await usdc.transfer(simpleRedemption.address, usdcNeeded);
+
+      // Calculate expected output (after fees)
+      const feeInUsdc = usdcNeeded.mul(instantRedeemFeeRate).div(1e4);
+      const expectedUsdcToUser = usdcNeeded.sub(feeInUsdc);
+
+      // Set minUsdcOut to slightly less than expected output (should succeed)
+      const minUsdcOut = expectedUsdcToUser.sub(ethers.utils.parseUnits('1', 6)); // 1 USDC tolerance
+
+      const initialUserUsdcBalance = await usdc.balanceOf(whitelistedUser.address);
+
+      // Perform instant redeem with slippage protection
+      await expect(
+        usdoExpress.connect(whitelistedUser).instantRedeemSelf(whitelistedUser.address, redeemAmount, minUsdcOut),
+      )
+        .to.emit(usdoExpress, 'InstantRedeem')
+        .withArgs(
+          whitelistedUser.address,
+          whitelistedUser.address,
+          redeemAmount,
+          anyValue, // usdcToUser
+          anyValue, // feeInUsdc
+          anyValue, // payout
+          anyValue, // redemptionFee
+          anyValue, // price
+          minUsdcOut, // minUsdcOut
+        );
+
+      // Check that user received USDC
+      const finalUserUsdcBalance = await usdc.balanceOf(whitelistedUser.address);
+      expect(finalUserUsdcBalance).to.be.gt(initialUserUsdcBalance);
+      expect(await usdo.balanceOf(whitelistedUser.address)).to.equal(0);
+    });
+
+    it('should revert instant redeem when output is below minUsdcOut', async function () {
+      // Mint USDO for the user
+      await usdo.mint(whitelistedUser.address, redeemAmount);
+
+      // Add USDC to the redemption contract for redemption
+      const usdcNeeded = await usdoExpress.convertToUnderlying(usdc.address, redeemAmount);
+      await usdc.transfer(simpleRedemption.address, usdcNeeded);
+
+      // Calculate expected output (after fees)
+      const feeInUsdc = usdcNeeded.mul(instantRedeemFeeRate).div(1e4);
+      const expectedUsdcToUser = usdcNeeded.sub(feeInUsdc);
+
+      // Set minUsdcOut to more than expected output (should fail)
+      const minUsdcOut = expectedUsdcToUser.add(ethers.utils.parseUnits('1', 6)); // Require 1 USDC more
+
+      // Perform instant redeem should revert due to slippage
+      await expect(
+        usdoExpress.connect(whitelistedUser).instantRedeemSelf(whitelistedUser.address, redeemAmount, minUsdcOut),
+      ).to.be.revertedWithCustomError(usdoExpress, 'InsufficientOutput');
+    });
+
+    it('should ignore slippage protection when minUsdcOut is zero', async function () {
+      // Mint USDO for the user
+      await usdo.mint(whitelistedUser.address, redeemAmount);
+
+      // Add USDC to the redemption contract for redemption
+      const usdcNeeded = await usdoExpress.convertToUnderlying(usdc.address, redeemAmount);
+      await usdc.transfer(simpleRedemption.address, usdcNeeded);
+
+      const initialUserUsdcBalance = await usdc.balanceOf(whitelistedUser.address);
+
+      // Perform instant redeem with minUsdcOut = 0 (no slippage protection)
+      await expect(usdoExpress.connect(whitelistedUser).instantRedeemSelf(whitelistedUser.address, redeemAmount, 0)).to
+        .not.be.reverted;
+
+      // Check that user received USDC
+      const finalUserUsdcBalance = await usdc.balanceOf(whitelistedUser.address);
+      expect(finalUserUsdcBalance).to.be.gt(initialUserUsdcBalance);
     });
 
     it('should allow redeeming for whitelisted user', async function () {
@@ -942,7 +1023,7 @@ describe('USDOExpress', function () {
 
     it('should fail to redeemSelf when paused', async function () {
       await usdoExpress.connect(operator).pauseRedeem();
-      await expect(usdoExpress.instantRedeemSelf(whitelistedUser.address, minimumAmt)).to.be.revertedWith(
+      await expect(usdoExpress.instantRedeemSelf(whitelistedUser.address, minimumAmt, 0)).to.be.revertedWith(
         'Pausable: Redeem paused',
       );
     });
