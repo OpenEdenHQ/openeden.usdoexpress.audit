@@ -691,6 +691,127 @@ describe('USDO', () => {
 
       expect(await contract.balanceOf(acc1.address)).to.equal(tokensAmount.mul(bonusMultiplier).div(parseUnits('1')));
     });
+
+    it('should enforce supply cap when adding bonus multiplier', async () => {
+      const { contract, owner } = await loadFixture(deployUSDOFixture);
+
+      // Set a low supply cap
+      const lowCap = parseUnits('1500'); // 1500 USDO
+      await contract.updateTotalSupplyCap(lowCap);
+
+      // Grant multiplier role
+      await contract.grantRole(roles.MULTIPLIER, owner.address);
+
+      // Current total supply is 1000 USDO (from fixture)
+      expect(await contract.totalSupply()).to.equal(parseUnits('1000'));
+
+      // Try to add a multiplier that would exceed the cap
+      // 1000 * 1.6 = 1600 > 1500 cap
+      const largeIncrement = parseUnits('0.6', 18); // 60% increase
+
+      await expect(contract.addBonusMultiplier(largeIncrement)).to.be.revertedWithCustomError(
+        contract,
+        'USDOExceedsTotalSupplyCap',
+      );
+    });
+
+    it('should enforce supply cap when updating bonus multiplier', async () => {
+      const { contract } = await loadFixture(deployUSDOFixture);
+
+      // Set a low supply cap
+      const lowCap = parseUnits('1200'); // 1200 USDO
+      await contract.updateTotalSupplyCap(lowCap);
+
+      // Current total supply is 1000 USDO
+      expect(await contract.totalSupply()).to.equal(parseUnits('1000'));
+
+      // Try to set a multiplier that would exceed the cap
+      // 1000 * 1.3 = 1300 > 1200 cap
+      const highMultiplier = parseUnits('1.3', 18); // 130%
+
+      await expect(contract.updateBonusMultiplier(highMultiplier)).to.be.revertedWithCustomError(
+        contract,
+        'USDOExceedsTotalSupplyCap',
+      );
+    });
+
+    it('should allow multiplier updates that stay within supply cap', async () => {
+      const { contract, owner } = await loadFixture(deployUSDOFixture);
+
+      // Set a reasonable supply cap
+      const cap = parseUnits('1100'); // 1100 USDO
+      await contract.updateTotalSupplyCap(cap);
+
+      // Grant multiplier role
+      await contract.grantRole(roles.MULTIPLIER, owner.address);
+
+      // Current total supply is 1000 USDO
+      expect(await contract.totalSupply()).to.equal(parseUnits('1000'));
+
+      // Add a small multiplier that stays within cap
+      // 1000 * 1.05 = 1050 < 1100 cap
+      const smallIncrement = parseUnits('0.05', 18); // 5% increase
+
+      await expect(contract.addBonusMultiplier(smallIncrement)).to.emit(contract, 'BonusMultiplier');
+
+      expect(await contract.totalSupply()).to.be.closeTo(parseUnits('1050'), parseUnits('0.001'));
+    });
+
+    it('should prevent supply cap bypass through multiple small increments', async () => {
+      const { contract, owner } = await loadFixture(deployUSDOFixture);
+
+      // Set a strict supply cap
+      const cap = parseUnits('1050'); // 1050 USDO
+      await contract.updateTotalSupplyCap(cap);
+
+      // Grant multiplier role
+      await contract.grantRole(roles.MULTIPLIER, owner.address);
+
+      // Add a multiplier that gets close to the cap
+      const firstIncrement = parseUnits('0.04', 18); // 4% increase -> 1040 USDO
+      await contract.addBonusMultiplier(firstIncrement);
+      expect(await contract.totalSupply()).to.be.closeTo(parseUnits('1040'), parseUnits('0.001'));
+
+      // Try to add another increment that would exceed the cap
+      const secondIncrement = parseUnits('0.02', 18); // 2% more -> would be ~1061 USDO
+      await expect(contract.addBonusMultiplier(secondIncrement)).to.be.revertedWithCustomError(
+        contract,
+        'USDOExceedsTotalSupplyCap',
+      );
+    });
+
+    it('should calculate supply cap correctly with existing shares', async () => {
+      const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
+
+      // Mint additional tokens to test with more shares
+      await contract.grantRole(roles.MINTER, owner.address);
+      await contract.mint(acc1.address, parseUnits('500')); // Now 1500 total supply
+      await contract.revokeRole(roles.MINTER, owner.address);
+
+      // Set cap slightly above current supply
+      const cap = parseUnits('1600'); // 1600 USDO
+      await contract.updateTotalSupplyCap(cap);
+
+      // Grant multiplier role
+      await contract.grantRole(roles.MULTIPLIER, owner.address);
+
+      // Current total supply is 1500 USDO
+      expect(await contract.totalSupply()).to.equal(parseUnits('1500'));
+
+      // Try to add multiplier that would exceed cap
+      // 1500 * 1.08 = 1620 > 1600 cap
+      const increment = parseUnits('0.08', 18); // 8% increase
+
+      await expect(contract.addBonusMultiplier(increment)).to.be.revertedWithCustomError(
+        contract,
+        'USDOExceedsTotalSupplyCap',
+      );
+
+      // But a smaller increment should work
+      // 1500 * 1.06 = 1590 < 1600 cap
+      const smallerIncrement = parseUnits('0.06', 18); // 6% increase
+      await expect(contract.addBonusMultiplier(smallerIncrement)).to.emit(contract, 'BonusMultiplier');
+    });
   });
 
   describe('Shares', () => {

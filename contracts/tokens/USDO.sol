@@ -524,6 +524,12 @@ contract USDO is
             revert USDOInvalidBonusMultiplier(_bonusMultiplier);
         }
 
+        // Check if new multiplier would cause total supply to exceed cap
+        uint256 newTotalSupply = (_totalShares * _bonusMultiplier) / _BASE;
+        if (newTotalSupply > _totalSupplyCap) {
+            revert USDOExceedsTotalSupplyCap(newTotalSupply, _totalSupplyCap);
+        }
+
         bonusMultiplier = _bonusMultiplier;
 
         emit BonusMultiplier(_bonusMultiplier);
