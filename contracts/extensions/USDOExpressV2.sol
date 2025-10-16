@@ -395,7 +395,7 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         if (!_kycList[from]) revert USDOExpressNotInKycList(from, from);
         _usdo.burn(from, amt);
 
-        (uint256 feeAmt, uint256 usdcAmt) = previewRedeem(amt, false);
+        (uint256 feeAmt, uint256 usdcAmt, ) = previewRedeem(amt, false);
         emit ManualRedeem(from, amt, usdcAmt, feeAmt);
     }
 
@@ -552,11 +552,34 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         (usdoAmtCurr, usdoAmtNext) = previewIssuance(usdoAmt);
     }
 
-    function previewRedeem(uint256 amt, bool isInstant) public view returns (uint256 feeAmt, uint256 usdcAmt) {
+    function previewRedeem(
+        uint256 amt,
+        bool isInstant
+    ) public view returns (uint256 feeAmt, uint256 usdcAmt, uint256 extraFee) {
         TxType txType = isInstant ? TxType.INSTANT_REDEEM : TxType.REDEEM;
         uint256 feeInUsdo = txsFee(amt, txType);
-        feeAmt = convertToUnderlying(_usdc, feeInUsdo);
-        usdcAmt = convertToUnderlying(_usdc, amt - feeInUsdo);
+
+        if (isInstant && address(_redemptionContract) != address(0)) {
+            // For instant redemption, include fees from the redemption contract
+            uint256 usdcNeeded = convertToUnderlying(_usdc, amt);
+
+            // Get redemption preview (payout and redemption fee)
+            (uint256 redemptionPayout, uint256 redemptionFee, ) = _redemptionContract.previewRedeem(usdcNeeded);
+
+            // Calculate USDOExpress fee in USDC
+            feeAmt = convertToUnderlying(_usdc, feeInUsdo);
+            
+            // Redemption contract fee (extraFee)
+            extraFee = redemptionFee;
+
+            // User receives: redemption payout - USDOExpress fee
+            usdcAmt = redemptionPayout - feeAmt;
+        } else {
+            // For manual redemption, only USDOExpress fees apply
+            feeAmt = convertToUnderlying(_usdc, feeInUsdo);
+            usdcAmt = convertToUnderlying(_usdc, amt - feeInUsdo);
+            extraFee = 0; // No redemption contract fees for manual redemption
+        }
     }
 
     /**

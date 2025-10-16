@@ -9,4 +9,6 @@ interface IRedemption {
     function redeem(uint256 amount) external returns (uint256 payout, uint256 fee, int256 price);
 
     function redeemFor(address user, uint256 amount) external returns (uint256 payout, uint256 fee, int256 price);
+
+    function previewRedeem(uint256 amount) external view returns (uint256 payout, uint256 fee, int256 price);
 }

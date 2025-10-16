@@ -64,6 +64,19 @@ contract MockSimpleRedemption is IRedemption {
     }
 
     /**
+     * @notice Preview a redemption without executing it
+     * @param amount Amount to redeem
+     * @return payout The amount that would be received
+     * @return fee The fee that would be charged (0 in this mock)
+     * @return price The price used (1:1 ratio)
+     */
+    function previewRedeem(uint256 amount) external pure override returns (uint256 payout, uint256 fee, int256 price) {
+        payout = amount;
+        fee = 0;
+        price = 1e8; // 1:1 ratio with 8 decimals
+    }
+
+    /**
      * @notice Get available liquidity
      */
     function availableLiquidity() external view returns (uint256) {

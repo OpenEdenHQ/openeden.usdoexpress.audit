@@ -178,6 +178,21 @@ contract UsycRedemption is IRedemption, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /**
+     * @notice Preview a redemption without executing it
+     * @param _amount Amount of USDC desired to receive
+     * @return payout USDC amount that would be received
+     * @return fee Fee that would be charged in USDC
+     * @return price Price used in conversion
+     */
+    function previewRedeem(uint256 _amount) external view override returns (uint256 payout, uint256 fee, int256 price) {
+        uint256 sellFeeRate = IUsycHelper(helper).sellFee();
+        if (sellFeeRate > maxSellFeeRate) revert ExcessiveSellFee(sellFeeRate);
+
+        uint256 usycAmount = convertUsdcToToken(_amount);
+        (payout, fee, price) = IUsycHelper(helper).sellPreview(usycAmount);
+    }
+
+    /**
      * @notice Check the available liquidity for instant redeem.
      * @return liquidity The available liquidity from the redemption contract.
      * @return tAllowance The redemption token allowance for the vault.
