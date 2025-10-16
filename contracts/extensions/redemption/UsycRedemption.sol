@@ -62,7 +62,6 @@ contract UsycRedemption is IRedemption, OwnableUpgradeable, UUPSUpgradeable {
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using MathUpgradeable for uint256;
 
-    uint256 public constant MAX_PRICE_AGE = 3 days; // 3-day buffer
     uint256 public minPrice;
     uint256 public scaleFactor;
     uint8 public usycDecimals;
@@ -76,6 +75,8 @@ contract UsycRedemption is IRedemption, OwnableUpgradeable, UUPSUpgradeable {
     address public liquidityController;
     uint256 public RESERVE2;
     uint256 public maxSellFeeRate;
+
+    uint256 public maxPriceAge;
 
     uint256 public constant FEE_MULTIPLIER = 10 ** 18;
     uint256 public constant HUNDRED_PCT = 100 * FEE_MULTIPLIER;
@@ -118,6 +119,15 @@ contract UsycRedemption is IRedemption, OwnableUpgradeable, UUPSUpgradeable {
 
         scaleFactor = 10 ** IPriceFeed(IUsycHelper(helper).oracle()).decimals();
         minPrice = 1 * scaleFactor;
+        maxPriceAge = 3 days; // Default: 3-day buffer
+    }
+
+    /**
+     * @notice Set the maximum price age (only owner)
+     * @param _maxPriceAge Maximum age for price data in seconds
+     */
+    function setMaxPriceAge(uint256 _maxPriceAge) external onlyOwner {
+        maxPriceAge = _maxPriceAge;
     }
 
     /**
@@ -265,14 +275,14 @@ contract UsycRedemption is IRedemption, OwnableUpgradeable, UUPSUpgradeable {
         (uint80 roundId, int256 price, , uint256 updatedAt, uint80 answeredInRound) = IPriceFeed(_oracle)
             .latestRoundData();
 
-        // Check if the price data is not older than 3 days
-        if (block.timestamp - updatedAt > MAX_PRICE_AGE) {
-            revert StalePrice(updatedAt, MAX_PRICE_AGE);
+        // Check if the price data is not older than maxPriceAge
+        if (block.timestamp - updatedAt > maxPriceAge) {
+            revert StalePrice(updatedAt, maxPriceAge);
         }
 
         // Check for incomplete round data
         if (answeredInRound < roundId) {
-            revert StalePrice(updatedAt, MAX_PRICE_AGE);
+            revert StalePrice(updatedAt, maxPriceAge);
         }
 
         if (uint256(price) < minPrice) revert InvalidPrice(price);
