@@ -126,7 +126,6 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         uint256 fee,
         uint256 payout,
         uint256 usycFee,
-        int256 price,
         uint256 minUsdcOut
     );
     event ManualRedeem(address indexed from, uint256 reqAmt, uint256 receiveAmt, uint256 fee);
@@ -356,22 +355,20 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         uint256 usdcNeeded = convertToUnderlying(_usdc, amt);
 
         // 3. redeem through the redemption contract and process
-        {
-            (uint256 payout, uint256 redemptionFee, int256 price) = _redemptionContract.redeemFor(from, usdcNeeded);
+        (uint256 payout, uint256 redemptionFee, ) = _redemptionContract.redeemFor(from, usdcNeeded);
 
-            // 4. calculate fees
-            uint256 feeInUsdc = txsFee(usdcNeeded, TxType.INSTANT_REDEEM);
-            uint256 usdcToUser = payout - feeInUsdc;
+        // 4. calculate fees
+        uint256 feeInUsdc = txsFee(usdcNeeded, TxType.INSTANT_REDEEM);
+        uint256 usdcToUser = payout - feeInUsdc;
 
-            // 5. slippage protection
-            if (minUsdcOut > 0 && usdcToUser < minUsdcOut) {
-                revert InsufficientOutput(usdcToUser, minUsdcOut);
-            }
-
-            // 6. transfer USDC fee to feeTo and the rest to user
-            _distributeUsdc(to, usdcToUser, feeInUsdc);
-            emit InstantRedeem(from, to, amt, usdcToUser, feeInUsdc, payout, redemptionFee, price, minUsdcOut);
+        // 5. slippage protection
+        if (minUsdcOut > 0 && usdcToUser < minUsdcOut) {
+            revert InsufficientOutput(usdcToUser, minUsdcOut);
         }
+
+        // 6. transfer USDC fee to feeTo and the rest to user
+        _distributeUsdc(to, usdcToUser, feeInUsdc);
+        emit InstantRedeem(from, to, amt, usdcToUser, feeInUsdc, payout, redemptionFee, minUsdcOut);
     }
 
     /**

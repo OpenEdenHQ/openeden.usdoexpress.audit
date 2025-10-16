@@ -52,7 +52,7 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200,
       },
-      viaIR: true,
+      // viaIR: true,
     },
   },
   platform: {
@@ -173,7 +173,7 @@ const config: HardhatUserConfig = {
 
 export default isTestEnv
   ? {
-      ...config,
-      ...testConfig,
-    }
+    ...config,
+    ...testConfig,
+  }
   : config;
