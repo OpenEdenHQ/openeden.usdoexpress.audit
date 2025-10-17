@@ -173,7 +173,7 @@ const config: HardhatUserConfig = {
 
 export default isTestEnv
   ? {
-    ...config,
-    ...testConfig,
-  }
+      ...config,
+      ...testConfig,
+    }
   : config;
