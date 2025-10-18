@@ -313,7 +313,7 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         address from = _msgSender();
         if (!_kycList[from] || !_kycList[to]) revert USDOExpressNotInKycList(from, to);
 
-        (uint256 usdoAmtCurr, uint256 fee) = _instantMintInternal(underlying, from, to, amt);
+        (uint256 usdoAmtCurr, uint256 fee) = _instantMintInternal(underlying, from, to, to, amt);
         emit InstantMint(underlying, from, to, amt, usdoAmtCurr, fee);
     }
 
@@ -327,7 +327,7 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         address from = _msgSender();
         if (!_kycList[from] || !_kycList[to]) revert USDOExpressNotInKycList(from, to);
 
-        (uint256 usdoAmtCurr, uint256 fee) = _instantMintInternal(underlying, from, address(this), amt);
+        (uint256 usdoAmtCurr, uint256 fee) = _instantMintInternal(underlying, from, address(this), to, amt);
 
         _usdo.approve(address(_cusdo), usdoAmtCurr);
         uint256 cusdoAmt = _cusdo.deposit(usdoAmtCurr, to);
@@ -795,11 +795,13 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
      * @param underlying The address of the token to mint USDO from.
      * @param to The address to mint the USDO to.
      * @param amt The supplied amount of the underlying token.
+     * @param user The end user to mint the USDO to.
      */
     function _instantMintInternal(
         address underlying,
         address from,
         address to,
+        address user,
         uint256 amt
     ) internal returns (uint256, uint256) {
         // Convert underlying amount to USDO decimals for comparison
@@ -808,10 +810,10 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         // if the user has not deposited before, the first deposit amount should be set
         // if the user has deposited before, the mint amount should be greater than the mint minimum
         // do noted: the first deposit amount will be greater than the mint minimum
-        if (!_firstDeposit[to]) {
+        if (!_firstDeposit[user]) {
             if (usdoEquivalent < _firstDepositAmount)
                 revert FirstDepositLessThanRequired(usdoEquivalent, _firstDepositAmount);
-            _firstDeposit[to] = true;
+            _firstDeposit[user] = true;
         } else {
             if (usdoEquivalent < _mintMinimum) revert MintLessThanMinimum(usdoEquivalent, _mintMinimum);
         }
