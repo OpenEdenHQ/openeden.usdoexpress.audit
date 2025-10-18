@@ -400,6 +400,8 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
     function redeem(uint256 amt) external whenNotPausedRedeem {
         address from = _msgSender();
         if (!_kycList[from]) revert USDOExpressNotInKycList(from, from);
+
+        _checkRedeemLimit(amt);
         _usdo.burn(from, amt);
 
         (uint256 feeAmt, uint256 usdcAmt, ) = previewRedeem(amt, false);

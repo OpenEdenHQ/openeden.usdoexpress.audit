@@ -1101,10 +1101,10 @@ describe('USDOExpress', function () {
       // TBILL is already configured in the test setup with 6 decimals and 1.01 rate
       const tbillAmount = ethers.utils.parseUnits('1000', 6); // 1000 TBILL (6 decimals)
       const expectedUsdoAmount = ethers.utils.parseUnits('1010', 18); // 1000 * 1.01 = 1010 USDO
-      
+
       const actualUsdoAmount = await usdoExpress.convertFromUnderlying(tbill.address, tbillAmount);
       expect(actualUsdoAmount).to.equal(expectedUsdoAmount);
-      
+
       // Test reverse conversion
       const convertedBack = await usdoExpress.convertToUnderlying(tbill.address, expectedUsdoAmount);
       expect(convertedBack).to.equal(tbillAmount);
@@ -1114,10 +1114,10 @@ describe('USDOExpress', function () {
       // USDC is already configured with 6 decimals and no price feed (1:1 rate)
       const usdcAmount = ethers.utils.parseUnits('1000', 6); // 1000 USDC (6 decimals)
       const expectedUsdoAmount = ethers.utils.parseUnits('1000', 18); // 1000 USDC = 1000 USDO
-      
+
       const actualUsdoAmount = await usdoExpress.convertFromUnderlying(usdc.address, usdcAmount);
       expect(actualUsdoAmount).to.equal(expectedUsdoAmount);
-      
+
       // Test reverse conversion
       const convertedBack = await usdoExpress.convertToUnderlying(usdc.address, expectedUsdoAmount);
       expect(convertedBack).to.equal(usdcAmount);
@@ -1127,10 +1127,10 @@ describe('USDOExpress', function () {
       // Test with very small USDC amount
       const smallUsdcAmount = BigNumber.from('1'); // 1 wei USDC (6 decimals)
       const usdoAmount = await usdoExpress.convertFromUnderlying(usdc.address, smallUsdcAmount);
-      
+
       // Convert back - should handle precision correctly
       const convertedBack = await usdoExpress.convertToUnderlying(usdc.address, usdoAmount);
-      
+
       // Should be able to handle the conversion without errors
       expect(convertedBack).to.be.gte(0);
     });
@@ -1139,10 +1139,10 @@ describe('USDOExpress', function () {
       // Test with large USDC amount
       const largeUsdcAmount = ethers.utils.parseUnits('1000000', 6); // 1M USDC
       const expectedUsdoAmount = ethers.utils.parseUnits('1000000', 18); // 1M USDO
-      
+
       const actualUsdoAmount = await usdoExpress.convertFromUnderlying(usdc.address, largeUsdcAmount);
       expect(actualUsdoAmount).to.equal(expectedUsdoAmount);
-      
+
       // Test reverse conversion
       const convertedBack = await usdoExpress.convertToUnderlying(usdc.address, expectedUsdoAmount);
       expect(convertedBack).to.equal(largeUsdcAmount);
@@ -1151,10 +1151,10 @@ describe('USDOExpress', function () {
     it('should handle rounding in convertToUnderlying correctly', async function () {
       // Test with USDO amount that doesn't divide evenly into USDC decimals
       const oddUsdoAmount = ethers.utils.parseUnits('1000.123456789012345678', 18); // 18 decimal precision
-      
+
       // Convert to USDC (6 decimals) - should round down
       const usdcAmount = await usdoExpress.convertToUnderlying(usdc.address, oddUsdoAmount);
-      
+
       // Expected: 1000.123456 USDC (truncated to 6 decimals)
       const expectedUsdcAmount = ethers.utils.parseUnits('1000.123456', 6);
       expect(usdcAmount).to.equal(expectedUsdcAmount);
@@ -1164,18 +1164,18 @@ describe('USDOExpress', function () {
       // Test that mint operations correctly normalize different asset decimals to USDO equivalent
       const usdcMintAmount = ethers.utils.parseUnits('1000', 6); // 1000 USDC
       const tbillMintAmount = ethers.utils.parseUnits('990.099', 6); // Amount that equals ~1000 USDO after rate
-      
+
       // Preview mint for USDC (should be ~1000 USDO worth)
       const usdcPreview = await usdoExpress.previewMint(usdc.address, usdcMintAmount);
       const usdcEquivalent = await usdoExpress.convertFromUnderlying(usdc.address, usdcPreview.netAmt);
-      
+
       // Preview mint for TBILL (should be similar USDO amount)
       const tbillPreview = await usdoExpress.previewMint(tbill.address, tbillMintAmount);
       const tbillEquivalent = await usdoExpress.convertFromUnderlying(tbill.address, tbillPreview.netAmt);
-      
+
       console.log('USDC equivalent in USDO:', usdcEquivalent.toString());
       console.log('TBILL equivalent in USDO:', tbillEquivalent.toString());
-      
+
       // Both should produce similar USDO amounts (within ~1% due to rate differences)
       const difference = usdcEquivalent.sub(tbillEquivalent).abs();
       const tolerance = usdcEquivalent.div(100); // 1% tolerance
