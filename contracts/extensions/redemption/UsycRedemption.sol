@@ -285,7 +285,8 @@ contract UsycRedemption is IRedemption, OwnableUpgradeable, UUPSUpgradeable {
             revert StalePrice(updatedAt, maxPriceAge);
         }
 
-        if (uint256(price) < minPrice) revert InvalidPrice(price);
+        if (price <= 0 || uint256(price) < minPrice) revert InvalidPrice(price);
+
         return uint256(price);
     }
 

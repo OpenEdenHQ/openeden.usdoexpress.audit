@@ -92,6 +92,20 @@ contract MockUsycHelper {
     function setSellFee(uint256 _sellFee) external {
         sellFee = _sellFee;
     }
+
+    function sellPreview(uint256 _amount) external view returns (uint256 payout, uint256 fee, int256 price) {
+        price = oracle.price();
+        uint8 oracleDecimals = oracle.decimals();
+        uint8 usycDecimals = usyc.decimals();
+        uint8 usdcDecimals = usdc.decimals();
+
+        // Convert USYC to USDC: (usycAmount * price * 10^usdcDecimals) / (10^oracleDecimals * 10^usycDecimals)
+        uint256 grossPayout = (_amount * uint256(price) * 10**usdcDecimals) / (10**oracleDecimals * 10**usycDecimals);
+        
+        // Calculate fee
+        fee = (grossPayout * sellFee) / HUNDRED_PCT;
+        payout = grossPayout - fee;
+    }
 }
 
 contract UsycRedemptionTest is Test {
@@ -122,13 +136,15 @@ contract UsycRedemptionTest is Test {
         // Deploy mock helper with 1% sell fee
         helper = new MockUsycHelper(address(usyc), address(usdc), address(oracle), 1e18);
         
-        // Deploy redemption contract
-        redemption = new UsycRedemption(
+        // Deploy redemption contract using UUPS proxy pattern
+        redemption = new UsycRedemption();
+        redemption.initialize(
             address(usyc),
             address(usdc), 
             address(helper),
             caller,
-            treasury
+            treasury,
+            address(0) // liquidityController (optional)
         );
 
         // Setup initial balances
@@ -314,5 +330,71 @@ contract UsycRedemptionTest is Test {
         if (treasuryUsdcAfter > treasuryUsdcBefore) {
             console.log("Excess returned to treasury:", treasuryUsdcAfter - treasuryUsdcBefore);
         }
+    }
+
+    function test_RevertOnNegativePrice() public {
+        // Test that negative prices are properly rejected
+        oracle.setPrice(-1000000); // Set negative price
+        
+        vm.expectRevert(abi.encodeWithSelector(InvalidPrice.selector, -1000000));
+        redemption.getPrice(address(oracle));
+    }
+
+    function test_RevertOnZeroPrice() public {
+        // Test that zero price is rejected
+        oracle.setPrice(0);
+        
+        vm.expectRevert(abi.encodeWithSelector(InvalidPrice.selector, 0));
+        redemption.getPrice(address(oracle));
+    }
+
+    function test_RevertOnBelowMinPrice() public {
+        // Test that prices below minPrice are rejected
+        uint256 minPrice = redemption.minPrice();
+        int256 belowMinPrice = int256(minPrice - 1);
+        
+        oracle.setPrice(belowMinPrice);
+        
+        vm.expectRevert(abi.encodeWithSelector(InvalidPrice.selector, belowMinPrice));
+        redemption.getPrice(address(oracle));
+    }
+
+    function test_NegativePriceNoWraparound() public {
+        // Critical test: ensure negative prices don't wrap to large positive values
+        int256 negativePrice = -1;
+        oracle.setPrice(negativePrice);
+        
+        // This should revert with InvalidPrice, not pass due to wraparound
+        vm.expectRevert(abi.encodeWithSelector(InvalidPrice.selector, negativePrice));
+        redemption.getPrice(address(oracle));
+        
+        // Test with very negative number that would wrap to huge positive
+        negativePrice = type(int256).min; // Most negative int256
+        oracle.setPrice(negativePrice);
+        
+        vm.expectRevert(abi.encodeWithSelector(InvalidPrice.selector, negativePrice));
+        redemption.getPrice(address(oracle));
+    }
+
+    function test_ValidPriceAccepted() public {
+        // Test that valid prices above minPrice are accepted
+        uint256 minPrice = redemption.minPrice();
+        int256 validPrice = int256(minPrice + 1000000); // Well above minPrice
+        
+        oracle.setPrice(validPrice);
+        
+        uint256 returnedPrice = redemption.getPrice(address(oracle));
+        assertEq(returnedPrice, uint256(validPrice), "Valid price should be returned correctly");
+    }
+
+    function test_MinPriceEdgeCase() public {
+        // Test that price exactly at minPrice is accepted
+        uint256 minPrice = redemption.minPrice();
+        int256 exactMinPrice = int256(minPrice);
+        
+        oracle.setPrice(exactMinPrice);
+        
+        uint256 returnedPrice = redemption.getPrice(address(oracle));
+        assertEq(returnedPrice, minPrice, "Price at minPrice should be accepted");
     }
 }
