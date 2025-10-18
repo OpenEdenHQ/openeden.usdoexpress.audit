@@ -41,7 +41,8 @@ const _500 = ethers.utils.parseUnits('500', 18);
 const _10k = ethers.utils.parseUnits('10000', 18);
 const _10M = ethers.utils.parseUnits('10000000', 18); // 10M
 
-const minimumAmt = ethers.utils.parseUnits('1000', 6); // 1K USDC
+// NOTE: minimumAmt for mint limits should be in USDO decimals (18) for proper comparison
+const minimumAmt = ethers.utils.parseUnits('1000', 18); // 1K USDO equivalent
 
 describe('USDOExpress', function () {
   let usdoExpress: USDOExpressV2;
@@ -135,14 +136,14 @@ describe('USDOExpress', function () {
         owner.address, // admin
         {
           totalSupplyCap: _10M,
-          mintMinimum: minimumAmt, // 1K USDC, with 6 decimals
+          mintMinimum: minimumAmt, // 1K USDO, with 18 decimals (for decimal normalization)
           mintLimit: _10k,
           mintDuration: 86400, // 1 day
 
           redeemMinimum: _500,
           redeemLimit: _10k,
           redeemDuration: 86400, // 1 day
-          firstDepositAmount: minimumAmt,
+          firstDepositAmount: minimumAmt, // 1K USDO, with 18 decimals (for decimal normalization)
         },
       ],
       {
@@ -513,7 +514,6 @@ describe('USDOExpress', function () {
           anyValue, // feeInUsdc
           anyValue, // payout
           anyValue, // usycFee
-          anyValue, // price
           0, // minUsdcOut
         );
 
@@ -590,7 +590,6 @@ describe('USDOExpress', function () {
           anyValue, // feeInUsdc
           anyValue, // payout
           anyValue, // redemptionFee
-          anyValue, // price
           minUsdcOut, // minUsdcOut
         );
 
@@ -837,8 +836,8 @@ describe('USDOExpress', function () {
     });
 
     it('should stop processing when insufficient liquidity', async function () {
-      // Add only partial USDC to contract
-      await usdc.transfer(usdoExpress.address, minimumAmt.div(4)); // 25USDC, and we redeem 50USDO
+      // Add only partial USDC to contract (250 USDC with 6 decimals)
+      await usdc.transfer(usdoExpress.address, ethers.utils.parseUnits('250', 6)); // 250 USDC, and we redeem 500 USDO
 
       await usdoExpress.connect(whitelistedUser).redeemRequest(whitelistedUser.address, redeemAmount);
 
@@ -977,19 +976,26 @@ describe('USDOExpress', function () {
     });
 
     it('should fail to mint less than first deposit', async function () {
-      await usdoExpress.connect(maintainer).setFirstDepositAmount(mintAmount.mul(2));
+      // Set first deposit amount to 2000 USDO equivalent (18 decimals)
+      const firstDepositInUsdo = ethers.utils.parseUnits('2000', 18);
+      await usdoExpress.connect(maintainer).setFirstDepositAmount(firstDepositInUsdo);
       await expect(
         usdoExpress.connect(whitelistedUser).instantMint(usdc.address, whitelistedUser.address, mintAmount),
       ).to.be.revertedWithCustomError(usdoExpress, 'FirstDepositLessThanRequired');
     });
 
     it('should fail to mint less than minimum', async function () {
-      await usdoExpress.connect(maintainer).setMintMinimum(minimumAmt.mul(2));
+      // Set mint minimum to 2000 USDO equivalent (18 decimals)
+      const mintMinimumInUsdo = ethers.utils.parseUnits('2000', 18);
+      await usdoExpress.connect(maintainer).setMintMinimum(mintMinimumInUsdo);
       await usdoExpress.connect(maintainer).updateFirstDeposit(whitelistedUser.address, true);
+
+      // Calculate what the USDO equivalent of mintAmount would be
+      const mintAmountInUsdo = await usdoExpress.convertFromUnderlying(usdc.address, mintAmount);
 
       await expect(usdoExpress.connect(whitelistedUser).instantMint(usdc.address, whitelistedUser.address, mintAmount))
         .to.be.revertedWithCustomError(usdoExpress, 'MintLessThanMinimum')
-        .withArgs(mintAmount, minimumAmt.mul(2));
+        .withArgs(mintAmountInUsdo, mintMinimumInUsdo);
     });
 
     it('should fail to mint more than limit in duration', async function () {
@@ -1007,6 +1013,58 @@ describe('USDOExpress', function () {
       await expect(
         usdoExpress.connect(whitelistedUser).instantMint(usdc.address, whitelistedUser.address, mint1),
       ).to.revertedWith('ERC20: insufficient allowance');
+    });
+
+    it('should correctly normalize decimals across different assets (USDC 6 decimals vs TBILL 6 decimals)', async function () {
+      // Set mint minimum to 500 USDO (18 decimals)
+      const mintMinInUsdo = ethers.utils.parseUnits('500', 18);
+      await usdoExpress.connect(maintainer).setMintMinimum(mintMinInUsdo);
+      await usdoExpress.connect(maintainer).updateFirstDeposit(whitelistedUser.address, true);
+
+      // Test 1: USDC (6 decimals) - 400 USDC should be rejected
+      const usdcAmount400 = ethers.utils.parseUnits('400', 6); // 400 USDC = 400 USDO equivalent
+      await usdc.connect(whitelistedUser).approve(usdoExpress.address, usdcAmount400);
+
+      // Calculate expected USDO equivalent
+      const usdc400InUsdo = await usdoExpress.convertFromUnderlying(usdc.address, usdcAmount400);
+
+      await expect(
+        usdoExpress.connect(whitelistedUser).instantMint(usdc.address, whitelistedUser.address, usdcAmount400),
+      )
+        .to.be.revertedWithCustomError(usdoExpress, 'MintLessThanMinimum')
+        .withArgs(usdc400InUsdo, mintMinInUsdo);
+
+      // Test 2: TBILL (6 decimals with 1.01 rate) - 400 TBILL should be rejected
+      // 400 TBILL * 1.01 rate = 404 USDO equivalent (still less than 500)
+      const tbillAmount400 = ethers.utils.parseUnits('400', 6);
+      await tbill.transfer(whitelistedUser.address, tbillAmount400);
+      await tbill.connect(whitelistedUser).approve(usdoExpress.address, tbillAmount400);
+
+      const tbill400InUsdo = await usdoExpress.convertFromUnderlying(tbill.address, tbillAmount400);
+
+      await expect(
+        usdoExpress.connect(whitelistedUser).instantMint(tbill.address, whitelistedUser.address, tbillAmount400),
+      )
+        .to.be.revertedWithCustomError(usdoExpress, 'MintLessThanMinimum')
+        .withArgs(tbill400InUsdo, mintMinInUsdo);
+
+      // Test 3: USDC 600 should succeed (600 USDC = 600 USDO equivalent > 500)
+      const usdcAmount600 = ethers.utils.parseUnits('600', 6);
+      await usdc.transfer(whitelistedUser.address, usdcAmount600);
+      await usdc.connect(whitelistedUser).approve(usdoExpress.address, usdcAmount600);
+
+      await expect(
+        usdoExpress.connect(whitelistedUser).instantMint(usdc.address, whitelistedUser.address, usdcAmount600),
+      ).to.not.be.reverted;
+
+      // Test 4: TBILL 500 should succeed (500 TBILL * 1.01 = 505 USDO equivalent > 500)
+      const tbillAmount500 = ethers.utils.parseUnits('500', 6);
+      await tbill.transfer(whitelistedUser.address, tbillAmount500);
+      await tbill.connect(whitelistedUser).approve(usdoExpress.address, tbillAmount500);
+
+      await expect(
+        usdoExpress.connect(whitelistedUser).instantMint(tbill.address, whitelistedUser.address, tbillAmount500),
+      ).to.not.be.reverted;
     });
   });
 
@@ -1035,6 +1093,93 @@ describe('USDOExpress', function () {
       await expect(
         usdoExpress.connect(whitelistedUser).redeemRequest(whitelistedUser.address, ethers.utils.parseUnits('500', 18)),
       ).to.be.revertedWith('Pausable: Redeem paused');
+    });
+  });
+
+  describe('Decimal Handling for Different Assets', function () {
+    it('should handle TBILL (6 decimals) with price feed correctly', async function () {
+      // TBILL is already configured in the test setup with 6 decimals and 1.01 rate
+      const tbillAmount = ethers.utils.parseUnits('1000', 6); // 1000 TBILL (6 decimals)
+      const expectedUsdoAmount = ethers.utils.parseUnits('1010', 18); // 1000 * 1.01 = 1010 USDO
+      
+      const actualUsdoAmount = await usdoExpress.convertFromUnderlying(tbill.address, tbillAmount);
+      expect(actualUsdoAmount).to.equal(expectedUsdoAmount);
+      
+      // Test reverse conversion
+      const convertedBack = await usdoExpress.convertToUnderlying(tbill.address, expectedUsdoAmount);
+      expect(convertedBack).to.equal(tbillAmount);
+    });
+
+    it('should handle USDC (6 decimals) without price feed correctly', async function () {
+      // USDC is already configured with 6 decimals and no price feed (1:1 rate)
+      const usdcAmount = ethers.utils.parseUnits('1000', 6); // 1000 USDC (6 decimals)
+      const expectedUsdoAmount = ethers.utils.parseUnits('1000', 18); // 1000 USDC = 1000 USDO
+      
+      const actualUsdoAmount = await usdoExpress.convertFromUnderlying(usdc.address, usdcAmount);
+      expect(actualUsdoAmount).to.equal(expectedUsdoAmount);
+      
+      // Test reverse conversion
+      const convertedBack = await usdoExpress.convertToUnderlying(usdc.address, expectedUsdoAmount);
+      expect(convertedBack).to.equal(usdcAmount);
+    });
+
+    it('should handle edge case: very small amounts with different decimals', async function () {
+      // Test with very small USDC amount
+      const smallUsdcAmount = BigNumber.from('1'); // 1 wei USDC (6 decimals)
+      const usdoAmount = await usdoExpress.convertFromUnderlying(usdc.address, smallUsdcAmount);
+      
+      // Convert back - should handle precision correctly
+      const convertedBack = await usdoExpress.convertToUnderlying(usdc.address, usdoAmount);
+      
+      // Should be able to handle the conversion without errors
+      expect(convertedBack).to.be.gte(0);
+    });
+
+    it('should handle large amounts with different decimals correctly', async function () {
+      // Test with large USDC amount
+      const largeUsdcAmount = ethers.utils.parseUnits('1000000', 6); // 1M USDC
+      const expectedUsdoAmount = ethers.utils.parseUnits('1000000', 18); // 1M USDO
+      
+      const actualUsdoAmount = await usdoExpress.convertFromUnderlying(usdc.address, largeUsdcAmount);
+      expect(actualUsdoAmount).to.equal(expectedUsdoAmount);
+      
+      // Test reverse conversion
+      const convertedBack = await usdoExpress.convertToUnderlying(usdc.address, expectedUsdoAmount);
+      expect(convertedBack).to.equal(largeUsdcAmount);
+    });
+
+    it('should handle rounding in convertToUnderlying correctly', async function () {
+      // Test with USDO amount that doesn't divide evenly into USDC decimals
+      const oddUsdoAmount = ethers.utils.parseUnits('1000.123456789012345678', 18); // 18 decimal precision
+      
+      // Convert to USDC (6 decimals) - should round down
+      const usdcAmount = await usdoExpress.convertToUnderlying(usdc.address, oddUsdoAmount);
+      
+      // Expected: 1000.123456 USDC (truncated to 6 decimals)
+      const expectedUsdcAmount = ethers.utils.parseUnits('1000.123456', 6);
+      expect(usdcAmount).to.equal(expectedUsdcAmount);
+    });
+
+    it('should verify decimal normalization for mint operations', async function () {
+      // Test that mint operations correctly normalize different asset decimals to USDO equivalent
+      const usdcMintAmount = ethers.utils.parseUnits('1000', 6); // 1000 USDC
+      const tbillMintAmount = ethers.utils.parseUnits('990.099', 6); // Amount that equals ~1000 USDO after rate
+      
+      // Preview mint for USDC (should be ~1000 USDO worth)
+      const usdcPreview = await usdoExpress.previewMint(usdc.address, usdcMintAmount);
+      const usdcEquivalent = await usdoExpress.convertFromUnderlying(usdc.address, usdcPreview.netAmt);
+      
+      // Preview mint for TBILL (should be similar USDO amount)
+      const tbillPreview = await usdoExpress.previewMint(tbill.address, tbillMintAmount);
+      const tbillEquivalent = await usdoExpress.convertFromUnderlying(tbill.address, tbillPreview.netAmt);
+      
+      console.log('USDC equivalent in USDO:', usdcEquivalent.toString());
+      console.log('TBILL equivalent in USDO:', tbillEquivalent.toString());
+      
+      // Both should produce similar USDO amounts (within ~1% due to rate differences)
+      const difference = usdcEquivalent.sub(tbillEquivalent).abs();
+      const tolerance = usdcEquivalent.div(100); // 1% tolerance
+      expect(difference).to.be.lte(tolerance);
     });
   });
 

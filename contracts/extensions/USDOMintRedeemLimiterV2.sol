@@ -55,13 +55,13 @@ abstract contract USDOMintRedeemLimiter {
 
     /**
      * @notice Initializes mint and redeem rate limits.
-     * @param mintMinimum    Min amount allowed to mint in one transaction
-     * @param mintLimit      Max amount allowed to mint in one duration
+     * @param mintMinimum    Min amount allowed to mint in one transaction (in USDO decimals - 18)
+     * @param mintLimit      Max amount allowed to mint in one duration (in USDO decimals - 18)
      * @param mintDuration   Reset duration for minting (seconds)
-     * @param redeemMinimum  Min amount allowed to redeem in one transaction
-     * @param redeemLimit    Max amount allowed to redeem in one duration
+     * @param redeemMinimum  Min amount allowed to redeem in one transaction (in USDO decimals - 18)
+     * @param redeemLimit    Max amount allowed to redeem in one duration (in USDO decimals - 18)
      * @param redeemDuration Reset duration for redeeming (seconds)
-     * @param firstDepositAmount The first deposit amount
+     * @param firstDepositAmount The first deposit amount (in USDO decimals - 18)
      */
 
     function __USDOMintRedeemLimiter_init(
@@ -107,7 +107,8 @@ abstract contract USDOMintRedeemLimiter {
 
     /**
      * @dev Updates the mint minimum.
-     * @param mintMinimum New mint minimum.
+     * @dev Amount should be in USDO decimals (18) for accurate comparison across different underlying assets
+     * @param mintMinimum New mint minimum in USDO equivalent.
      */
     function _setMintMinimum(uint256 mintMinimum) internal {
         _mintMinimum = mintMinimum;
@@ -180,7 +181,8 @@ abstract contract USDOMintRedeemLimiter {
     }
 
     /// @notice Set the first deposit amount
-    /// @param amount The first deposit amount
+    /// @dev Amount should be in USDO decimals (18) for accurate comparison across different underlying assets
+    /// @param amount The first deposit amount in USDO equivalent
     function _setFirstDepositAmount(uint256 amount) internal {
         _firstDepositAmount = amount;
         emit FirstDepositAmount(amount);

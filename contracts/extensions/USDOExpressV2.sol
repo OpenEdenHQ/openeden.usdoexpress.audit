@@ -687,8 +687,8 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
                     USDOMintRedeemLimiter functions
     //////////////////////////////////////////////////////////////*/
     /**
-     * @notice Set the mint minimum in USDC/TBILL.
-     * @dev with 6 decimals
+     * @notice Set the mint minimum in USDO equivalent.
+     * @dev Amount should be in 18 decimals (USDO decimals) for accurate comparison across different underlying assets
      */
     function setMintMinimum(uint256 mintMinimum) external onlyRole(MAINTAINER_ROLE) {
         _setMintMinimum(mintMinimum);
@@ -732,7 +732,8 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
 
     /**
      * @notice Set the first deposit amount for the account.
-     * @param amount The amount of the first deposit.
+     * @dev Amount should be in 18 decimals (USDO decimals) for accurate comparison across different underlying assets
+     * @param amount The amount of the first deposit in USDO equivalent.
      */
     function setFirstDepositAmount(uint256 amount) external onlyRole(MAINTAINER_ROLE) {
         _setFirstDepositAmount(amount);
@@ -799,14 +800,18 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         address to,
         uint256 amt
     ) internal returns (uint256, uint256) {
+        // Convert underlying amount to USDO decimals for comparison
+        uint256 usdoEquivalent = convertFromUnderlying(underlying, amt);
+
         // if the user has not deposited before, the first deposit amount should be set
         // if the user has deposited before, the mint amount should be greater than the mint minimum
         // do noted: the first deposit amount will be greater than the mint minimum
         if (!_firstDeposit[to]) {
-            if (amt < _firstDepositAmount) revert FirstDepositLessThanRequired(amt, _firstDepositAmount);
+            if (usdoEquivalent < _firstDepositAmount)
+                revert FirstDepositLessThanRequired(usdoEquivalent, _firstDepositAmount);
             _firstDeposit[to] = true;
         } else {
-            if (amt < _mintMinimum) revert MintLessThanMinimum(amt, _mintMinimum);
+            if (usdoEquivalent < _mintMinimum) revert MintLessThanMinimum(usdoEquivalent, _mintMinimum);
         }
 
         (uint256 netAmt, uint256 fee, uint256 usdoAmtCurr, ) = previewMint(underlying, amt);
