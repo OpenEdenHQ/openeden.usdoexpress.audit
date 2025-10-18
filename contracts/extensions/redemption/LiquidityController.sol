@@ -35,6 +35,7 @@ contract LiquidityController is OwnableUpgradeable, UUPSUpgradeable {
     mapping(address => uint256) public userQuotas;
     mapping(address => uint256) public usedQuotas;
     mapping(address => bool) public authorizedUsers;
+    mapping(address => bool) private userExists;
 
     address[] public users;
     address public caller;
@@ -99,10 +100,11 @@ contract LiquidityController is OwnableUpgradeable, UUPSUpgradeable {
             totalAllocated = totalAllocated + quota;
 
             // Add to users array if new user
-            if (!authorizedUsers[user]) {
+            if (!userExists[user]) {
                 users.push(user);
-                authorizedUsers[user] = true;
+                userExists[user] = true;
             }
+            authorizedUsers[user] = true;
         } else {
             // Removing quota - require no active usage
             if (usedQuota > 0) {

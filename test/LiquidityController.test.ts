@@ -366,6 +366,40 @@ describe('LiquidityController', function () {
   });
 
   describe('Edge Cases', function () {
+    it('Should prevent duplicate user entries when quota is reset and reassigned', async function () {
+      // Initial setup: set quota for user1
+      await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
+
+      // Verify user is in the list once
+      let users = await liquidityController.getAllUsers();
+      expect(users).to.have.lengthOf(1);
+      expect(users[0]).to.equal(user1.address);
+
+      // Reset quota to zero (this should not remove user from array)
+      await liquidityController.setUserQuota(user1.address, 0);
+      expect(await liquidityController.authorizedUsers(user1.address)).to.be.false;
+
+      // Reassign quota (this should NOT add duplicate entry)
+      await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
+      expect(await liquidityController.authorizedUsers(user1.address)).to.be.true;
+
+      // Verify user is still in the list only once
+      users = await liquidityController.getAllUsers();
+      expect(users).to.have.lengthOf(1);
+      expect(users[0]).to.equal(user1.address);
+
+      // Repeat the cycle multiple times to ensure no duplicates accumulate
+      for (let i = 0; i < 5; i++) {
+        await liquidityController.setUserQuota(user1.address, 0);
+        await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
+      }
+
+      // Final verification: user should still appear only once
+      users = await liquidityController.getAllUsers();
+      expect(users).to.have.lengthOf(1);
+      expect(users[0]).to.equal(user1.address);
+    });
+
     it('Should handle quota removal correctly', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
       expect(await liquidityController.authorizedUsers(user1.address)).to.be.true;
