@@ -29,9 +29,6 @@ contract AssetRegistry is IAssetRegistry, UUPSUpgradeable, AccessControlUpgradea
     // Constants
     uint256 private constant _USDO_DECIMALS = 18;
 
-    // Maximum staleness period for price feeds (default: 2 days)
-    uint256 public maxStalePeriod;
-
     // Asset configurations
     mapping(address => AssetConfig) private _assetConfigs;
     address[] private _supportedAssets;
@@ -46,9 +43,6 @@ contract AssetRegistry is IAssetRegistry, UUPSUpgradeable, AccessControlUpgradea
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
-        // Set default staleness period to 2 days
-        maxStalePeriod = 2 days;
-
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MAINTAINER_ROLE, admin);
         _grantRole(MAINTAINER_ROLE, msg.sender);
@@ -58,33 +52,26 @@ contract AssetRegistry is IAssetRegistry, UUPSUpgradeable, AccessControlUpgradea
     function _authorizeUpgrade(address) internal override onlyRole(UPGRADE_ROLE) {}
 
     /**
-     * @notice Set the maximum staleness period for price feeds
-     * @param newStalePeriod The new staleness period in seconds
-     */
-    function setMaxStalePeriod(uint256 newStalePeriod) external onlyRole(MAINTAINER_ROLE) {
-        if (newStalePeriod == 0) revert AssetRegistryInvalidStalePeriod(newStalePeriod);
-        maxStalePeriod = newStalePeriod;
-        emit MaxStalePeriodUpdated(newStalePeriod);
-    }
-
-    /**
      * @notice Get fresh price from price feed with staleness check
+     * @param asset The asset address to get the staleness period for
      * @param priceFeed The price feed address
      * @return price The fresh price
      * @return decimals The price feed decimals
      */
-    function _getFreshPrice(address priceFeed) internal view returns (uint256 price, uint8 decimals) {
+    function _getFreshPrice(address asset, address priceFeed) internal view returns (uint256 price, uint8 decimals) {
         (uint80 roundId, int256 answer, , uint256 updatedAt, uint80 answeredInRound) = IPriceFeed(priceFeed)
             .latestRoundData();
 
         if (answer <= 0) revert AssetRegistryInvalidPrice(answer);
-        if (block.timestamp - updatedAt > maxStalePeriod) {
-            revert AssetRegistryStalePriceData(updatedAt, block.timestamp, maxStalePeriod);
+
+        uint256 assetMaxStalePeriod = _assetConfigs[asset].maxStalePeriod;
+        if (block.timestamp - updatedAt > assetMaxStalePeriod) {
+            revert AssetRegistryStalePriceData(updatedAt, block.timestamp, assetMaxStalePeriod);
         }
 
         // Check for incomplete round data
         if (answeredInRound < roundId) {
-            revert AssetRegistryStalePriceData(updatedAt, block.timestamp, maxStalePeriod);
+            revert AssetRegistryStalePriceData(updatedAt, block.timestamp, assetMaxStalePeriod);
         }
 
         price = uint256(answer);
@@ -94,6 +81,10 @@ contract AssetRegistry is IAssetRegistry, UUPSUpgradeable, AccessControlUpgradea
     function setAssetConfig(AssetConfig calldata config) external onlyRole(MAINTAINER_ROLE) {
         address asset = config.asset;
         if (asset == address(0)) revert AssetRegistryZeroAddress();
+
+        if (config.priceFeed != address(0) && config.maxStalePeriod == 0) {
+            revert AssetRegistryInvalidStalePeriod(config.maxStalePeriod);
+        }
 
         bool wasSupported = _assetConfigs[asset].isSupported;
         _assetConfigs[asset] = config;
@@ -134,7 +125,7 @@ contract AssetRegistry is IAssetRegistry, UUPSUpgradeable, AccessControlUpgradea
 
         // If asset has price feed, convert to USD value first
         if (config.priceFeed != address(0)) {
-            (uint256 rate, uint8 feedDecimals) = _getFreshPrice(config.priceFeed);
+            (uint256 rate, uint8 feedDecimals) = _getFreshPrice(asset, config.priceFeed);
             amount = assetAmount.mulDiv(rate, 10 ** feedDecimals);
         }
 
@@ -154,7 +145,7 @@ contract AssetRegistry is IAssetRegistry, UUPSUpgradeable, AccessControlUpgradea
 
         // If asset has price feed, convert from USD value
         if (config.priceFeed != address(0)) {
-            (uint256 rate, uint8 feedDecimals) = _getFreshPrice(config.priceFeed);
+            (uint256 rate, uint8 feedDecimals) = _getFreshPrice(asset, config.priceFeed);
             assetAmount = amount.mulDiv(10 ** feedDecimals, rate);
         } else {
             assetAmount = amount;

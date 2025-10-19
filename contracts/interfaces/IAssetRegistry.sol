@@ -10,6 +10,7 @@ interface IAssetRegistry {
         address asset;
         bool isSupported;
         address priceFeed; // Optional: IPriceFeed contract for price conversion (like TBILL)
+        uint256 maxStalePeriod; // Maximum staleness period for this asset's price feed (in seconds)
     }
 
     /**

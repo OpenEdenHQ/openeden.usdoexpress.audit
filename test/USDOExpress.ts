@@ -219,12 +219,14 @@ describe('USDOExpress', function () {
       asset: usdc.address,
       isSupported: true,
       priceFeed: ethers.constants.AddressZero, // USDC is stable, no price feed needed
+      maxStalePeriod: 0, // No staleness check for stable assets without price feeds
     });
 
     await assetRegistry.setAssetConfig({
       asset: tbill.address,
       isSupported: true,
       priceFeed: tbill.address, // TBILL contract itself provides price feed
+      maxStalePeriod: 1 * 60 * 60, // 1 hour staleness period for TBILL
     });
 
     console.log('AssetRegistry configured with USDC and TBILL support');
@@ -1234,6 +1236,7 @@ describe('USDOExpress', function () {
           asset: newToken,
           isSupported: true,
           priceFeed: ethers.constants.AddressZero,
+          maxStalePeriod: 0, // No staleness check for assets without price feeds
         }),
       )
         .to.emit(assetRegistry, 'AssetAdded')
@@ -1251,6 +1254,7 @@ describe('USDOExpress', function () {
         asset: testToken,
         isSupported: true,
         priceFeed: ethers.constants.AddressZero,
+        maxStalePeriod: 0, // No staleness check for assets without price feeds
       });
 
       // Attempting to disable via setAssetConfig should revert
@@ -1259,6 +1263,7 @@ describe('USDOExpress', function () {
           asset: testToken,
           isSupported: false,
           priceFeed: ethers.constants.AddressZero,
+          maxStalePeriod: 0,
         }),
       ).to.be.revertedWithCustomError(assetRegistry, 'AssetRegistryUnsupportedAssetConfiguration');
     });
@@ -1270,6 +1275,7 @@ describe('USDOExpress', function () {
         asset: testToken,
         isSupported: true,
         priceFeed: ethers.constants.AddressZero,
+        maxStalePeriod: 0, // No staleness check for assets without price feeds
       });
 
       // Then remove it using dedicated function
@@ -1288,6 +1294,7 @@ describe('USDOExpress', function () {
           asset: testToken,
           isSupported: false,
           priceFeed: ethers.constants.AddressZero,
+          maxStalePeriod: 0,
         }),
       ).to.be.revertedWithCustomError(assetRegistry, 'AssetRegistryUnsupportedAssetConfiguration');
     });
