@@ -40,6 +40,7 @@ contract AssetRegistry is IAssetRegistry, UUPSUpgradeable, AccessControlUpgradea
     }
 
     function initialize(address admin) external initializer {
+        if (admin == address(0)) revert AssetRegistryZeroAddress();
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
