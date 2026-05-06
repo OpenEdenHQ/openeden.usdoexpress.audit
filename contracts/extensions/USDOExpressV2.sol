@@ -129,6 +129,14 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
         uint256 minUsdcOut
     );
     event ManualRedeem(address indexed from, uint256 reqAmt, uint256 receiveAmt, uint256 fee);
+    event OffchainRedeem(
+        address indexed from,
+        address indexed to,
+        address indexed asset,
+        uint256 reqAmt,
+        uint256 receiveAmt,
+        uint256 fee
+    );
     event UpdateFirstDeposit(address indexed account, bool flag);
 
     // Queue-related events
@@ -160,6 +168,8 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
     error USDOExpressInvalidInput(uint256 input);
     error USDOExpressInsufficientLiquidity(uint256 required, uint256 available);
     error InsufficientOutput(uint256 received, uint256 minimum);
+    error USDOExpressUnderlyingNotAllowed(address asset);
+    error USDOExpressInvalidAddress();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -394,18 +404,30 @@ contract USDOExpressV2 is UUPSUpgradeable, AccessControlUpgradeable, USDOExpress
     }
 
     /**
-     * @notice The redemption request will be processed manually.
-     * @param amt The requested amount of USDO to redeem.
+     * @notice Redeem USDO with off-chain settlement in an arbitrary asset.
+     * @dev Burns USDO immediately. The settlement payout is handled fully off-chain;
+     *      the contract only emits the burn record for the DB to match against.
+     *      No queue, no on-chain fee, no T+N delay; fees are applied off-chain at
+     *      settlement time. Express must hold BURNER_ROLE on the USDO contract.
+     * @param asset Informational asset address the user wants to receive off-chain
+     *              (e.g. RLUSD). Must be non-zero and not a registry-supported underlying.
+     * @param amt USDO amount to burn.
+     * @param to KYC'd recipient address recorded for off-chain settlement.
      */
-    function redeem(uint256 amt) external whenNotPausedRedeem {
+    function requestDirectRedeem(address asset, uint256 amt, address to) external whenNotPausedRedeem {
         address from = _msgSender();
-        if (!_kycList[from]) revert USDOExpressNotInKycList(from, from);
+        if (!_kycList[from] || !_kycList[to]) revert USDOExpressNotInKycList(from, to);
+        if (amt == 0) revert USDOExpressInvalidInput(amt);
+        if (asset == address(0) || to == address(0)) revert USDOExpressInvalidAddress();
+        if (_assetRegistry.isAssetSupported(asset)) revert USDOExpressUnderlyingNotAllowed(asset);
 
         _checkRedeemLimit(amt);
         _usdo.burn(from, amt);
 
-        (uint256 feeAmt, uint256 usdcAmt, ) = previewRedeem(amt, false);
-        emit ManualRedeem(from, amt, usdcAmt, feeAmt);
+        // Stablecoin settlement assumed 1:1 with USDC, so previewRedeem's USDC-denominated
+        // numbers carry over directly to the off-chain payout asset.
+        (uint256 feeAmt, uint256 receiveAmt, ) = previewRedeem(amt, false);
+        emit OffchainRedeem(from, to, asset, amt, receiveAmt, feeAmt);
     }
 
     /**
