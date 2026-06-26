@@ -1,3 +1,11 @@
+# USDO / USDOExpress Contracts
+
+Smart contracts for the USDO stablecoin protocol: the rebasing `USDO` token, the `cUSDO` wrapper, the `USDOExpress` mint/redeem gateway, asset registry, and Proof-of-Reserve tracking. Built with Hardhat (with Foundry support) and OpenZeppelin UUPS proxies.
+
+## Deployed Addresses
+
+Deployed contract addresses for all networks (mainnet + testnet) are in [`deployed-addresses.md`](./deployed-addresses.md).
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
@@ -184,3 +192,15 @@ npx hardhat help
 - `DEFAULT_ADMIN_ROLE`: Grants the ability to grant roles.
 - `UPGRADE_ROLE`: Grants the ability to upgrade the contract.
 - `PAUSE_ROLE`: Grants the ability to pause/unpause the contract.
+
+## Audits
+
+Independent security audit reports are in [`audits/`](./audits/).
+
+## Attribution
+
+This project is released under the [MIT License](./LICENSE). While the MIT
+License does not require it, if you use this software in your own product or
+service, we kindly ask that you include visible attribution to **OpenEden**
+(e.g. in your documentation, UI, or credits) and link to
+[openeden.com](https://openeden.com/).
