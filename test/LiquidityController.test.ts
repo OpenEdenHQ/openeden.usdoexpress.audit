@@ -1,19 +1,19 @@
 import { expect } from 'chai';
 import { ethers, upgrades } from 'hardhat';
 import { LiquidityController } from '../typechain-types';
-import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
+import type { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers';
 
 describe('LiquidityController', function () {
   let liquidityController: LiquidityController;
-  let owner: SignerWithAddress;
-  let caller: SignerWithAddress;
-  let user1: SignerWithAddress;
-  let user2: SignerWithAddress;
-  let user3: SignerWithAddress;
+  let owner: HardhatEthersSigner;
+  let caller: HardhatEthersSigner;
+  let user1: HardhatEthersSigner;
+  let user2: HardhatEthersSigner;
+  let user3: HardhatEthersSigner;
 
-  const TOTAL_LIQUIDITY = ethers.utils.parseEther('1000000'); // 1M USYC
-  const USER1_QUOTA = ethers.utils.parseEther('100000'); // 100K USYC
-  const USER2_QUOTA = ethers.utils.parseEther('200000'); // 200K USYC
+  const TOTAL_LIQUIDITY = ethers.parseEther('1000000'); // 1M USYC
+  const USER1_QUOTA = ethers.parseEther('100000'); // 100K USYC
+  const USER2_QUOTA = ethers.parseEther('200000'); // 200K USYC
 
   beforeEach(async function () {
     [owner, caller, user1, user2, user3] = await ethers.getSigners();
@@ -36,7 +36,7 @@ describe('LiquidityController', function () {
     it('Should revert if initialized with zero caller', async function () {
       const LiquidityControllerFactory = await ethers.getContractFactory('LiquidityController');
       await expect(
-        upgrades.deployProxy(LiquidityControllerFactory, [ethers.constants.AddressZero, TOTAL_LIQUIDITY], {
+        upgrades.deployProxy(LiquidityControllerFactory, [ethers.ZeroAddress, TOTAL_LIQUIDITY], {
           initializer: 'initialize',
         }),
       ).to.be.revertedWithCustomError(liquidityController, 'ZeroAddress');
@@ -60,11 +60,11 @@ describe('LiquidityController', function () {
 
       expect(await liquidityController.userQuotas(user1.address)).to.equal(USER1_QUOTA);
       expect(await liquidityController.userQuotas(user2.address)).to.equal(USER2_QUOTA);
-      expect(await liquidityController.totalAllocated()).to.equal(USER1_QUOTA.add(USER2_QUOTA));
+      expect(await liquidityController.totalAllocated()).to.equal(USER1_QUOTA + USER2_QUOTA);
     });
 
     it('Should revert if quota exceeds total liquidity', async function () {
-      const excessiveQuota = TOTAL_LIQUIDITY.add(1);
+      const excessiveQuota = TOTAL_LIQUIDITY + 1n;
       await expect(liquidityController.setUserQuota(user1.address, excessiveQuota)).to.be.revertedWithCustomError(
         liquidityController,
         'QuotaExceedsTotal',
@@ -73,7 +73,7 @@ describe('LiquidityController', function () {
 
     it('Should revert if total quotas exceed total liquidity', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const remainingQuota = TOTAL_LIQUIDITY.sub(USER1_QUOTA).add(1);
+      const remainingQuota = TOTAL_LIQUIDITY - USER1_QUOTA + 1n;
 
       await expect(liquidityController.setUserQuota(user2.address, remainingQuota)).to.be.revertedWithCustomError(
         liquidityController,
@@ -86,7 +86,7 @@ describe('LiquidityController', function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
 
       // Update quota
-      const newQuota = ethers.utils.parseEther('150000');
+      const newQuota = ethers.parseEther('150000');
       await liquidityController.setUserQuota(user1.address, newQuota);
 
       expect(await liquidityController.userQuotas(user1.address)).to.equal(newQuota);
@@ -115,11 +115,11 @@ describe('LiquidityController', function () {
     it('Should revert when decreasing quota below used amount', async function () {
       // Set initial quota and use some of it
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const usedAmount = ethers.utils.parseEther('80000');
+      const usedAmount = ethers.parseEther('80000');
       await liquidityController.connect(caller).reserveLiquidity(user1.address, usedAmount);
 
       // Try to set quota below used amount (50k < 80k used)
-      const insufficientQuota = ethers.utils.parseEther('50000');
+      const insufficientQuota = ethers.parseEther('50000');
       await expect(liquidityController.setUserQuota(user1.address, insufficientQuota)).to.be.revertedWithCustomError(
         liquidityController,
         'QuotaExceedsUsed',
@@ -135,18 +135,18 @@ describe('LiquidityController', function () {
     });
 
     it('Should allow caller to reserve liquidity for authorized user', async function () {
-      const reserveAmount = ethers.utils.parseEther('50000');
+      const reserveAmount = ethers.parseEther('50000');
 
       await expect(liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount))
         .to.emit(liquidityController, 'QuotaUsed')
-        .withArgs(user1.address, reserveAmount, USER1_QUOTA.sub(reserveAmount));
+        .withArgs(user1.address, reserveAmount, USER1_QUOTA - reserveAmount);
 
       expect(await liquidityController.usedQuotas(user1.address)).to.equal(reserveAmount);
       expect(await liquidityController.totalUsed()).to.equal(reserveAmount);
     });
 
     it('Should revert if non-caller tries to reserve', async function () {
-      const reserveAmount = ethers.utils.parseEther('50000');
+      const reserveAmount = ethers.parseEther('50000');
 
       await expect(
         liquidityController.connect(user1).reserveLiquidity(user1.address, reserveAmount),
@@ -154,7 +154,7 @@ describe('LiquidityController', function () {
     });
 
     it('Should revert if user has no quota', async function () {
-      const reserveAmount = ethers.utils.parseEther('50000');
+      const reserveAmount = ethers.parseEther('50000');
 
       await expect(
         liquidityController.connect(caller).reserveLiquidity(user3.address, reserveAmount),
@@ -162,7 +162,7 @@ describe('LiquidityController', function () {
     });
 
     it('Should revert if user has insufficient quota', async function () {
-      const reserveAmount = USER1_QUOTA.add(1);
+      const reserveAmount = USER1_QUOTA + 1n;
 
       await expect(
         liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount),
@@ -175,36 +175,34 @@ describe('LiquidityController', function () {
       const LiquidityControllerFactory = await ethers.getContractFactory('LiquidityController');
       const limitedLiquidityController = (await upgrades.deployProxy(
         LiquidityControllerFactory,
-        [caller.address, ethers.utils.parseEther('250000')], // Only 250k total
+        [caller.address, ethers.parseEther('250000')], // Only 250k total
         { initializer: 'initialize' },
       )) as LiquidityController;
 
       // Set quotas: user1: 150k, user2: 100k (total = 250k, fits in total liquidity)
-      await limitedLiquidityController.setUserQuota(user1.address, ethers.utils.parseEther('150000'));
+      await limitedLiquidityController.setUserQuota(user1.address, ethers.parseEther('150000'));
       await limitedLiquidityController.setUserQuota(user2.address, USER1_QUOTA); // 100k
 
       // Reserve 150k for user1 (total used = 150k, remaining = 100k)
-      await limitedLiquidityController
-        .connect(caller)
-        .reserveLiquidity(user1.address, ethers.utils.parseEther('150000'));
+      await limitedLiquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('150000'));
 
       // Now only 100k remains in total liquidity pool
       // User2 has 100k quota, so user quota check will pass
       // But we try to reserve 100k + 1 wei, which will fail on total liquidity check
       await expect(
-        limitedLiquidityController.connect(caller).reserveLiquidity(user2.address, USER1_QUOTA.add(1)),
+        limitedLiquidityController.connect(caller).reserveLiquidity(user2.address, USER1_QUOTA + 1n),
       ).to.be.revertedWithCustomError(limitedLiquidityController, 'InsufficientTotalLiquidity');
     });
 
     it('Should handle multiple reservations correctly', async function () {
-      const reserve1 = ethers.utils.parseEther('30000');
-      const reserve2 = ethers.utils.parseEther('20000');
+      const reserve1 = ethers.parseEther('30000');
+      const reserve2 = ethers.parseEther('20000');
 
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserve1);
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserve2);
 
-      expect(await liquidityController.usedQuotas(user1.address)).to.equal(reserve1.add(reserve2));
-      expect(await liquidityController.totalUsed()).to.equal(reserve1.add(reserve2));
+      expect(await liquidityController.usedQuotas(user1.address)).to.equal(reserve1 + reserve2);
+      expect(await liquidityController.totalUsed()).to.equal(reserve1 + reserve2);
     });
 
     it('Should revert on zero amount reservation', async function () {
@@ -217,23 +215,23 @@ describe('LiquidityController', function () {
   describe('Liquidity Restoration', function () {
     beforeEach(async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const reserveAmount = ethers.utils.parseEther('50000');
+      const reserveAmount = ethers.parseEther('50000');
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
     });
 
     it('Should allow owner to restore liquidity', async function () {
-      const restoreAmount = ethers.utils.parseEther('20000');
+      const restoreAmount = ethers.parseEther('20000');
       const initialUsed = await liquidityController.usedQuotas(user1.address);
 
       await expect(liquidityController.restoreLiquidity(user1.address, restoreAmount))
         .to.emit(liquidityController, 'QuotaRestored')
-        .withArgs(user1.address, restoreAmount, USER1_QUOTA.sub(initialUsed.sub(restoreAmount)));
+        .withArgs(user1.address, restoreAmount, USER1_QUOTA - (initialUsed - restoreAmount));
 
-      expect(await liquidityController.usedQuotas(user1.address)).to.equal(initialUsed.sub(restoreAmount));
+      expect(await liquidityController.usedQuotas(user1.address)).to.equal(initialUsed - restoreAmount);
     });
 
     it('Should revert if non-owner tries to restore', async function () {
-      const restoreAmount = ethers.utils.parseEther('20000');
+      const restoreAmount = ethers.parseEther('20000');
 
       await expect(
         liquidityController.connect(user1).restoreLiquidity(user1.address, restoreAmount),
@@ -242,7 +240,7 @@ describe('LiquidityController', function () {
 
     it('Should cap restoration at used amount', async function () {
       const usedAmount = await liquidityController.usedQuotas(user1.address);
-      const excessiveRestore = usedAmount.add(ethers.utils.parseEther('10000'));
+      const excessiveRestore = usedAmount + ethers.parseEther('10000');
 
       await liquidityController.restoreLiquidity(user1.address, excessiveRestore);
 
@@ -276,8 +274,8 @@ describe('LiquidityController', function () {
       const [totalAvailable, totalReserved, totalConsumed, poolBalance] =
         await liquidityController.checkTotalLiquidity();
 
-      expect(totalAvailable).to.equal(TOTAL_LIQUIDITY.sub(USER1_QUOTA.add(USER2_QUOTA)));
-      expect(totalReserved).to.equal(USER1_QUOTA.add(USER2_QUOTA));
+      expect(totalAvailable).to.equal(TOTAL_LIQUIDITY - (USER1_QUOTA + USER2_QUOTA));
+      expect(totalReserved).to.equal(USER1_QUOTA + USER2_QUOTA);
       expect(totalConsumed).to.equal(0);
       expect(poolBalance).to.equal(TOTAL_LIQUIDITY);
     });
@@ -304,9 +302,9 @@ describe('LiquidityController', function () {
     });
 
     it('Should validate user quota correctly', async function () {
-      const testAmount = ethers.utils.parseEther('50000');
+      const testAmount = ethers.parseEther('50000');
       const [allowed1, quota1] = await liquidityController.validateUserQuota(user1.address, testAmount);
-      const [allowed2, quota2] = await liquidityController.validateUserQuota(user1.address, USER1_QUOTA.add(1));
+      const [allowed2, quota2] = await liquidityController.validateUserQuota(user1.address, USER1_QUOTA + 1n);
 
       expect(allowed1).to.be.true;
       expect(quota1).to.equal(USER1_QUOTA);
@@ -318,7 +316,7 @@ describe('LiquidityController', function () {
 
   describe('Admin Functions', function () {
     it('Should allow owner to update total liquidity', async function () {
-      const newTotal = ethers.utils.parseEther('2000000');
+      const newTotal = ethers.parseEther('2000000');
 
       await expect(liquidityController.updateTotalLiquidity(newTotal))
         .to.emit(liquidityController, 'TotalLiquidityUpdated')
@@ -329,7 +327,7 @@ describe('LiquidityController', function () {
 
     it('Should revert if new total is less than allocated', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const insufficientTotal = USER1_QUOTA.sub(1);
+      const insufficientTotal = USER1_QUOTA - 1n;
 
       await expect(liquidityController.updateTotalLiquidity(insufficientTotal)).to.be.revertedWithCustomError(
         liquidityController,
@@ -348,7 +346,7 @@ describe('LiquidityController', function () {
     });
 
     it('Should revert if trying to set zero address as caller', async function () {
-      await expect(liquidityController.updateCaller(ethers.constants.AddressZero)).to.be.revertedWithCustomError(
+      await expect(liquidityController.updateCaller(ethers.ZeroAddress)).to.be.revertedWithCustomError(
         liquidityController,
         'ZeroAddress',
       );
@@ -356,7 +354,7 @@ describe('LiquidityController', function () {
 
     it('Should only allow owner to call admin functions', async function () {
       await expect(
-        liquidityController.connect(user1).updateTotalLiquidity(ethers.utils.parseEther('2000000')),
+        liquidityController.connect(user1).updateTotalLiquidity(ethers.parseEther('2000000')),
       ).to.be.revertedWith('Ownable: caller is not the owner');
 
       await expect(liquidityController.connect(user1).updateCaller(user2.address)).to.be.revertedWith(
@@ -416,7 +414,7 @@ describe('LiquidityController', function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
 
       // Update quota to higher value
-      const newQuota = ethers.utils.parseEther('150000');
+      const newQuota = ethers.parseEther('150000');
       await liquidityController.setUserQuota(user1.address, newQuota);
 
       expect(await liquidityController.userQuotas(user1.address)).to.equal(newQuota);
@@ -425,11 +423,11 @@ describe('LiquidityController', function () {
 
     it('Should handle quota updates with existing usage', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const reserveAmount = ethers.utils.parseEther('30000');
+      const reserveAmount = ethers.parseEther('30000');
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
 
       // Update quota to higher value (should work)
-      const newQuota = ethers.utils.parseEther('150000');
+      const newQuota = ethers.parseEther('150000');
       await liquidityController.setUserQuota(user1.address, newQuota);
 
       expect(await liquidityController.usedQuotas(user1.address)).to.equal(reserveAmount);
@@ -438,7 +436,7 @@ describe('LiquidityController', function () {
 
     it('Should allow setting quota exactly equal to used amount', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const reserveAmount = ethers.utils.parseEther('30000');
+      const reserveAmount = ethers.parseEther('30000');
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
 
       // Set quota exactly equal to used amount (edge case - should work)
@@ -456,7 +454,7 @@ describe('LiquidityController', function () {
 
     it('Should prevent quota removal when user has active usage', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const reserveAmount = ethers.utils.parseEther('30000');
+      const reserveAmount = ethers.parseEther('30000');
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
 
       // Attempt to remove quota should fail due to active usage
@@ -473,7 +471,7 @@ describe('LiquidityController', function () {
 
     it('Should allow quota removal after restoring liquidity first', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const reserveAmount = ethers.utils.parseEther('30000');
+      const reserveAmount = ethers.parseEther('30000');
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
 
       // Step 1: Restore liquidity first (simulating returned liquidity)
@@ -492,8 +490,8 @@ describe('LiquidityController', function () {
     it('Should handle sequential reservations that exhaust quota', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
 
-      const reserve1 = ethers.utils.parseEther('60000');
-      const reserve2 = ethers.utils.parseEther('40000');
+      const reserve1 = ethers.parseEther('60000');
+      const reserve2 = ethers.parseEther('40000');
 
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserve1);
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserve2);
@@ -512,17 +510,17 @@ describe('LiquidityController', function () {
 
     it('Should handle partial restoration correctly', async function () {
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA);
-      const reserveAmount = ethers.utils.parseEther('50000');
+      const reserveAmount = ethers.parseEther('50000');
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserveAmount);
 
       // Restore only part of it
-      const restoreAmount = ethers.utils.parseEther('20000');
+      const restoreAmount = ethers.parseEther('20000');
       await liquidityController.restoreLiquidity(user1.address, restoreAmount);
 
       const [available, total, used] = await liquidityController.checkUserLiquidity(user1.address);
-      expect(available).to.equal(ethers.utils.parseEther('70000')); // 100k - 30k
+      expect(available).to.equal(ethers.parseEther('70000')); // 100k - 30k
       expect(total).to.equal(USER1_QUOTA);
-      expect(used).to.equal(ethers.utils.parseEther('30000'));
+      expect(used).to.equal(ethers.parseEther('30000'));
     });
   });
 
@@ -531,13 +529,13 @@ describe('LiquidityController', function () {
       // Set up different quotas for different users
       await liquidityController.setUserQuota(user1.address, USER1_QUOTA); // 100k
       await liquidityController.setUserQuota(user2.address, USER2_QUOTA); // 200k
-      await liquidityController.setUserQuota(user3.address, ethers.utils.parseEther('50000')); // 50k
+      await liquidityController.setUserQuota(user3.address, ethers.parseEther('50000')); // 50k
     });
 
     it('Should handle independent reservations from multiple users', async function () {
-      const reserve1 = ethers.utils.parseEther('40000');
-      const reserve2 = ethers.utils.parseEther('80000');
-      const reserve3 = ethers.utils.parseEther('20000');
+      const reserve1 = ethers.parseEther('40000');
+      const reserve2 = ethers.parseEther('80000');
+      const reserve3 = ethers.parseEther('20000');
 
       // Reserve for each user
       await liquidityController.connect(caller).reserveLiquidity(user1.address, reserve1);
@@ -546,75 +544,69 @@ describe('LiquidityController', function () {
 
       // Verify each user's state independently
       const [avail1, total1, used1] = await liquidityController.checkUserLiquidity(user1.address);
-      expect(avail1).to.equal(USER1_QUOTA.sub(reserve1));
+      expect(avail1).to.equal(USER1_QUOTA - reserve1);
       expect(total1).to.equal(USER1_QUOTA);
       expect(used1).to.equal(reserve1);
 
       const [avail2, total2, used2] = await liquidityController.checkUserLiquidity(user2.address);
-      expect(avail2).to.equal(USER2_QUOTA.sub(reserve2));
+      expect(avail2).to.equal(USER2_QUOTA - reserve2);
       expect(total2).to.equal(USER2_QUOTA);
       expect(used2).to.equal(reserve2);
 
       const [avail3, total3, used3] = await liquidityController.checkUserLiquidity(user3.address);
-      expect(avail3).to.equal(ethers.utils.parseEther('30000')); // 50k - 20k
-      expect(total3).to.equal(ethers.utils.parseEther('50000'));
+      expect(avail3).to.equal(ethers.parseEther('30000')); // 50k - 20k
+      expect(total3).to.equal(ethers.parseEther('50000'));
       expect(used3).to.equal(reserve3);
 
       // Verify total used
-      expect(await liquidityController.totalUsed()).to.equal(reserve1.add(reserve2).add(reserve3));
+      expect(await liquidityController.totalUsed()).to.equal(reserve1 + reserve2 + reserve3);
     });
 
     it('Should handle independent restorations from multiple users', async function () {
       // First reserve for all users
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('50000'));
-      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('100000'));
-      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.utils.parseEther('30000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('50000'));
+      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.parseEther('100000'));
+      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.parseEther('30000'));
 
       const totalUsedBefore = await liquidityController.totalUsed();
 
       // Restore for user1 and user3 only
-      await liquidityController.restoreLiquidity(user1.address, ethers.utils.parseEther('20000'));
-      await liquidityController.restoreLiquidity(user3.address, ethers.utils.parseEther('10000'));
+      await liquidityController.restoreLiquidity(user1.address, ethers.parseEther('20000'));
+      await liquidityController.restoreLiquidity(user3.address, ethers.parseEther('10000'));
 
       // Verify user1
       const [avail1, , used1] = await liquidityController.checkUserLiquidity(user1.address);
-      expect(used1).to.equal(ethers.utils.parseEther('30000')); // 50k - 20k
-      expect(avail1).to.equal(ethers.utils.parseEther('70000')); // 100k - 30k
+      expect(used1).to.equal(ethers.parseEther('30000')); // 50k - 20k
+      expect(avail1).to.equal(ethers.parseEther('70000')); // 100k - 30k
 
       // Verify user2 unchanged
       const [avail2, , used2] = await liquidityController.checkUserLiquidity(user2.address);
-      expect(used2).to.equal(ethers.utils.parseEther('100000')); // unchanged
-      expect(avail2).to.equal(ethers.utils.parseEther('100000')); // 200k - 100k
+      expect(used2).to.equal(ethers.parseEther('100000')); // unchanged
+      expect(avail2).to.equal(ethers.parseEther('100000')); // 200k - 100k
 
       // Verify user3
       const [avail3, , used3] = await liquidityController.checkUserLiquidity(user3.address);
-      expect(used3).to.equal(ethers.utils.parseEther('20000')); // 30k - 10k
-      expect(avail3).to.equal(ethers.utils.parseEther('30000')); // 50k - 20k
+      expect(used3).to.equal(ethers.parseEther('20000')); // 30k - 10k
+      expect(avail3).to.equal(ethers.parseEther('30000')); // 50k - 20k
 
       // Verify total used decreased correctly
-      const expectedDecrease = ethers.utils.parseEther('30000'); // 20k + 10k
-      expect(await liquidityController.totalUsed()).to.equal(totalUsedBefore.sub(expectedDecrease));
+      const expectedDecrease = ethers.parseEther('30000'); // 20k + 10k
+      expect(await liquidityController.totalUsed()).to.equal(totalUsedBefore - expectedDecrease);
     });
 
     it('Should validate quota independently for each user', async function () {
       // Test validation for different amounts for different users
       const [allowed1_small, quota1] = await liquidityController.validateUserQuota(
         user1.address,
-        ethers.utils.parseEther('50000'),
+        ethers.parseEther('50000'),
       );
-      const [allowed1_large] = await liquidityController.validateUserQuota(
-        user1.address,
-        ethers.utils.parseEther('150000'),
-      );
+      const [allowed1_large] = await liquidityController.validateUserQuota(user1.address, ethers.parseEther('150000'));
 
       const [allowed2_small, quota2] = await liquidityController.validateUserQuota(
         user2.address,
-        ethers.utils.parseEther('50000'),
+        ethers.parseEther('50000'),
       );
-      const [allowed2_large] = await liquidityController.validateUserQuota(
-        user2.address,
-        ethers.utils.parseEther('250000'),
-      );
+      const [allowed2_large] = await liquidityController.validateUserQuota(user2.address, ethers.parseEther('250000'));
 
       // User1: 100k quota
       expect(allowed1_small).to.be.true;
@@ -629,38 +621,38 @@ describe('LiquidityController', function () {
 
     it('Should handle mixed reserve and restore across users', async function () {
       // User1: Reserve 60k
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('60000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('60000'));
 
       // User2: Reserve 150k
-      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('150000'));
+      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.parseEther('150000'));
 
       // User3: Reserve 40k
-      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.utils.parseEther('40000'));
+      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.parseEther('40000'));
 
       const totalUsedAfterReserve = await liquidityController.totalUsed();
-      expect(totalUsedAfterReserve).to.equal(ethers.utils.parseEther('250000')); // 60k + 150k + 40k
+      expect(totalUsedAfterReserve).to.equal(ethers.parseEther('250000')); // 60k + 150k + 40k
 
       // Restore some for user2
-      await liquidityController.restoreLiquidity(user2.address, ethers.utils.parseEther('50000'));
+      await liquidityController.restoreLiquidity(user2.address, ethers.parseEther('50000'));
 
       // Reserve more for user1
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('30000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('30000'));
 
       // Final state verification
       const [avail1, , used1] = await liquidityController.checkUserLiquidity(user1.address);
-      expect(used1).to.equal(ethers.utils.parseEther('90000')); // 60k + 30k
-      expect(avail1).to.equal(ethers.utils.parseEther('10000')); // 100k - 90k
+      expect(used1).to.equal(ethers.parseEther('90000')); // 60k + 30k
+      expect(avail1).to.equal(ethers.parseEther('10000')); // 100k - 90k
 
       const [avail2, , used2] = await liquidityController.checkUserLiquidity(user2.address);
-      expect(used2).to.equal(ethers.utils.parseEther('100000')); // 150k - 50k
-      expect(avail2).to.equal(ethers.utils.parseEther('100000')); // 200k - 100k
+      expect(used2).to.equal(ethers.parseEther('100000')); // 150k - 50k
+      expect(avail2).to.equal(ethers.parseEther('100000')); // 200k - 100k
 
       const [avail3, , used3] = await liquidityController.checkUserLiquidity(user3.address);
-      expect(used3).to.equal(ethers.utils.parseEther('40000')); // unchanged
-      expect(avail3).to.equal(ethers.utils.parseEther('10000')); // 50k - 40k
+      expect(used3).to.equal(ethers.parseEther('40000')); // unchanged
+      expect(avail3).to.equal(ethers.parseEther('10000')); // 50k - 40k
 
       // Total: 60k + 30k + 100k + 40k = 230k
-      expect(await liquidityController.totalUsed()).to.equal(ethers.utils.parseEther('230000'));
+      expect(await liquidityController.totalUsed()).to.equal(ethers.parseEther('230000'));
     });
 
     it('Should return correct authorization status for multiple users', async function () {
@@ -678,8 +670,8 @@ describe('LiquidityController', function () {
       expect(avail2).to.equal(USER2_QUOTA);
 
       expect(hasQuota3).to.be.true;
-      expect(quota3).to.equal(ethers.utils.parseEther('50000'));
-      expect(avail3).to.equal(ethers.utils.parseEther('50000'));
+      expect(quota3).to.equal(ethers.parseEther('50000'));
+      expect(avail3).to.equal(ethers.parseEther('50000'));
 
       // Get all users
       const allUsers = await liquidityController.getAllUsers();
@@ -699,7 +691,7 @@ describe('LiquidityController', function () {
       expect(quota).to.equal(USER2_QUOTA);
 
       // User2 can still reserve
-      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('100000'));
+      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.parseEther('100000'));
 
       // User1 should still be at max usage
       const [avail1, , used1] = await liquidityController.checkUserLiquidity(user1.address);
@@ -709,88 +701,82 @@ describe('LiquidityController', function () {
 
     it('Should handle quota updates for one user without affecting others', async function () {
       // Reserve for all users
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('30000'));
-      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('50000'));
-      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.utils.parseEther('20000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('30000'));
+      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.parseEther('50000'));
+      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.parseEther('20000'));
 
       // Update user2's quota to higher value
-      const newUser2Quota = ethers.utils.parseEther('300000');
+      const newUser2Quota = ethers.parseEther('300000');
       await liquidityController.setUserQuota(user2.address, newUser2Quota);
 
       // Verify user2 updated
       expect(await liquidityController.userQuotas(user2.address)).to.equal(newUser2Quota);
       const [avail2, , used2] = await liquidityController.checkUserLiquidity(user2.address);
-      expect(used2).to.equal(ethers.utils.parseEther('50000')); // unchanged
-      expect(avail2).to.equal(newUser2Quota.sub(ethers.utils.parseEther('50000')));
+      expect(used2).to.equal(ethers.parseEther('50000')); // unchanged
+      expect(avail2).to.equal(newUser2Quota - ethers.parseEther('50000'));
 
       // Verify user1 and user3 unchanged
       expect(await liquidityController.userQuotas(user1.address)).to.equal(USER1_QUOTA);
-      expect(await liquidityController.usedQuotas(user1.address)).to.equal(ethers.utils.parseEther('30000'));
+      expect(await liquidityController.usedQuotas(user1.address)).to.equal(ethers.parseEther('30000'));
 
-      expect(await liquidityController.userQuotas(user3.address)).to.equal(ethers.utils.parseEther('50000'));
-      expect(await liquidityController.usedQuotas(user3.address)).to.equal(ethers.utils.parseEther('20000'));
+      expect(await liquidityController.userQuotas(user3.address)).to.equal(ethers.parseEther('50000'));
+      expect(await liquidityController.usedQuotas(user3.address)).to.equal(ethers.parseEther('20000'));
 
       // Total allocated should reflect the change
-      const expectedTotal = USER1_QUOTA.add(newUser2Quota).add(ethers.utils.parseEther('50000'));
+      const expectedTotal = USER1_QUOTA + newUser2Quota + ethers.parseEther('50000');
       expect(await liquidityController.totalAllocated()).to.equal(expectedTotal);
     });
 
     it('Should handle complete quota lifecycle for multiple users', async function () {
       // Phase 1: Set quotas (already done in beforeEach)
       expect(await liquidityController.totalAllocated()).to.equal(
-        USER1_QUOTA.add(USER2_QUOTA).add(ethers.utils.parseEther('50000')),
+        USER1_QUOTA + USER2_QUOTA + ethers.parseEther('50000'),
       );
 
       // Phase 2: Users reserve different amounts
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('80000'));
-      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('120000'));
-      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.utils.parseEther('35000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('80000'));
+      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.parseEther('120000'));
+      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.parseEther('35000'));
 
-      expect(await liquidityController.totalUsed()).to.equal(ethers.utils.parseEther('235000'));
+      expect(await liquidityController.totalUsed()).to.equal(ethers.parseEther('235000'));
 
       // Phase 3: Partially restore for some users
-      await liquidityController.restoreLiquidity(user1.address, ethers.utils.parseEther('30000'));
-      await liquidityController.restoreLiquidity(user3.address, ethers.utils.parseEther('15000'));
+      await liquidityController.restoreLiquidity(user1.address, ethers.parseEther('30000'));
+      await liquidityController.restoreLiquidity(user3.address, ethers.parseEther('15000'));
 
-      expect(await liquidityController.totalUsed()).to.equal(ethers.utils.parseEther('190000')); // 235k - 45k
+      expect(await liquidityController.totalUsed()).to.equal(ethers.parseEther('190000')); // 235k - 45k
 
       // Phase 4: Reserve more
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('20000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('20000'));
 
       // Final verification
       const [avail1, , used1] = await liquidityController.checkUserLiquidity(user1.address);
-      expect(used1).to.equal(ethers.utils.parseEther('70000')); // 80k - 30k + 20k
-      expect(avail1).to.equal(ethers.utils.parseEther('30000'));
+      expect(used1).to.equal(ethers.parseEther('70000')); // 80k - 30k + 20k
+      expect(avail1).to.equal(ethers.parseEther('30000'));
 
       const [avail2, , used2] = await liquidityController.checkUserLiquidity(user2.address);
-      expect(used2).to.equal(ethers.utils.parseEther('120000')); // unchanged
-      expect(avail2).to.equal(ethers.utils.parseEther('80000'));
+      expect(used2).to.equal(ethers.parseEther('120000')); // unchanged
+      expect(avail2).to.equal(ethers.parseEther('80000'));
 
       const [avail3, , used3] = await liquidityController.checkUserLiquidity(user3.address);
-      expect(used3).to.equal(ethers.utils.parseEther('20000')); // 35k - 15k
-      expect(avail3).to.equal(ethers.utils.parseEther('30000'));
+      expect(used3).to.equal(ethers.parseEther('20000')); // 35k - 15k
+      expect(avail3).to.equal(ethers.parseEther('30000'));
 
-      expect(await liquidityController.totalUsed()).to.equal(ethers.utils.parseEther('210000')); // 70k + 120k + 20k
+      expect(await liquidityController.totalUsed()).to.equal(ethers.parseEther('210000')); // 70k + 120k + 20k
     });
 
     it('Should validate quotas correctly for different users simultaneously', async function () {
       // Reserve some for user1
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('70000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('70000'));
 
       // Now validate different scenarios
       const [allowed1_remaining] = await liquidityController.validateUserQuota(
         user1.address,
-        ethers.utils.parseEther('30000'),
+        ethers.parseEther('30000'),
       ); // 30k <= 30k remaining
-      const [allowed1_exceeds] = await liquidityController.validateUserQuota(
-        user1.address,
-        ethers.utils.parseEther('31000'),
-      ); // 31k > 30k remaining
+      const [allowed1_exceeds] = await liquidityController.validateUserQuota(user1.address, ethers.parseEther('31000')); // 31k > 30k remaining
 
-      const [allowed2_half] = await liquidityController.validateUserQuota(
-        user2.address,
-        ethers.utils.parseEther('100000'),
-      ); // 100k <= 200k
+      const [allowed2_half] = await liquidityController.validateUserQuota(user2.address, ethers.parseEther('100000')); // 100k <= 200k
       const [allowed2_full] = await liquidityController.validateUserQuota(user2.address, USER2_QUOTA); // 200k <= 200k
 
       expect(allowed1_remaining).to.be.true;
@@ -809,27 +795,27 @@ describe('LiquidityController', function () {
       ).to.be.revertedWithCustomError(liquidityController, 'InsufficientUserQuota');
 
       // User2 can still reserve (has separate quota)
-      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('50000'));
+      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.parseEther('50000'));
 
       // User3 can still reserve (has separate quota)
-      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.utils.parseEther('25000'));
+      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.parseEther('25000'));
 
       // Verify states
       expect(await liquidityController.usedQuotas(user1.address)).to.equal(USER1_QUOTA);
-      expect(await liquidityController.usedQuotas(user2.address)).to.equal(ethers.utils.parseEther('50000'));
-      expect(await liquidityController.usedQuotas(user3.address)).to.equal(ethers.utils.parseEther('25000'));
+      expect(await liquidityController.usedQuotas(user2.address)).to.equal(ethers.parseEther('50000'));
+      expect(await liquidityController.usedQuotas(user3.address)).to.equal(ethers.parseEther('25000'));
     });
 
     it('Should handle quota removal with proper restoration workflow', async function () {
       // Reserve for all users
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('40000'));
-      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('80000'));
-      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.utils.parseEther('20000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('40000'));
+      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.parseEther('80000'));
+      await liquidityController.connect(caller).reserveLiquidity(user3.address, ethers.parseEther('20000'));
 
       const totalUsedBefore = await liquidityController.totalUsed();
 
       // Step 1: Restore user2's liquidity first (simulating returned liquidity)
-      await liquidityController.restoreLiquidity(user2.address, ethers.utils.parseEther('80000'));
+      await liquidityController.restoreLiquidity(user2.address, ethers.parseEther('80000'));
 
       // Step 2: Now remove user2's quota
       await liquidityController.setUserQuota(user2.address, 0);
@@ -840,47 +826,47 @@ describe('LiquidityController', function () {
       expect(await liquidityController.authorizedUsers(user2.address)).to.be.false;
 
       // Verify user1 and user3 unchanged
-      expect(await liquidityController.usedQuotas(user1.address)).to.equal(ethers.utils.parseEther('40000'));
-      expect(await liquidityController.usedQuotas(user3.address)).to.equal(ethers.utils.parseEther('20000'));
+      expect(await liquidityController.usedQuotas(user1.address)).to.equal(ethers.parseEther('40000'));
+      expect(await liquidityController.usedQuotas(user3.address)).to.equal(ethers.parseEther('20000'));
 
       // Total used should have decreased by user2's usage due to restoreLiquidity(), not quota removal
-      expect(await liquidityController.totalUsed()).to.equal(totalUsedBefore.sub(ethers.utils.parseEther('80000')));
+      expect(await liquidityController.totalUsed()).to.equal(totalUsedBefore - ethers.parseEther('80000'));
     });
 
     it('Should correctly track total liquidity across multiple user operations', async function () {
       // Initial state
       const [totalAvail0, totalRes0, totalCons0, pool0] = await liquidityController.checkTotalLiquidity();
       expect(pool0).to.equal(TOTAL_LIQUIDITY);
-      expect(totalRes0).to.equal(ethers.utils.parseEther('350000')); // 100k + 200k + 50k
+      expect(totalRes0).to.equal(ethers.parseEther('350000')); // 100k + 200k + 50k
       expect(totalCons0).to.equal(0);
-      expect(totalAvail0).to.equal(TOTAL_LIQUIDITY.sub(ethers.utils.parseEther('350000')));
+      expect(totalAvail0).to.equal(TOTAL_LIQUIDITY - ethers.parseEther('350000'));
 
       // Reserve operations
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('100000'));
-      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.utils.parseEther('200000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('100000'));
+      await liquidityController.connect(caller).reserveLiquidity(user2.address, ethers.parseEther('200000'));
 
       const [totalAvail1, totalRes1, totalCons1, pool1] = await liquidityController.checkTotalLiquidity();
-      expect(totalCons1).to.equal(ethers.utils.parseEther('300000'));
+      expect(totalCons1).to.equal(ethers.parseEther('300000'));
       expect(pool1).to.equal(TOTAL_LIQUIDITY);
 
       // Restore operation
-      await liquidityController.restoreLiquidity(user1.address, ethers.utils.parseEther('50000'));
+      await liquidityController.restoreLiquidity(user1.address, ethers.parseEther('50000'));
 
       const [totalAvail2, totalRes2, totalCons2, pool2] = await liquidityController.checkTotalLiquidity();
-      expect(totalCons2).to.equal(ethers.utils.parseEther('250000')); // 300k - 50k
+      expect(totalCons2).to.equal(ethers.parseEther('250000')); // 300k - 50k
       expect(pool2).to.equal(TOTAL_LIQUIDITY);
-      expect(totalRes2).to.equal(ethers.utils.parseEther('350000')); // allocated unchanged
+      expect(totalRes2).to.equal(ethers.parseEther('350000')); // allocated unchanged
     });
 
     it('Should handle authorization checks across multiple users with different states', async function () {
       // Reserve for user1
-      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.utils.parseEther('90000'));
+      await liquidityController.connect(caller).reserveLiquidity(user1.address, ethers.parseEther('90000'));
 
       // Check authorization with different usage levels
       const [hasQuota1, quota1, avail1] = await liquidityController.isUserAuthorized(user1.address);
       expect(hasQuota1).to.be.true;
       expect(quota1).to.equal(USER1_QUOTA);
-      expect(avail1).to.equal(ethers.utils.parseEther('10000')); // 100k - 90k
+      expect(avail1).to.equal(ethers.parseEther('10000')); // 100k - 90k
 
       const [hasQuota2, quota2, avail2] = await liquidityController.isUserAuthorized(user2.address);
       expect(hasQuota2).to.be.true;

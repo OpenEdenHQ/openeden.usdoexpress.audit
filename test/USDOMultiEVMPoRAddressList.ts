@@ -1,24 +1,25 @@
 import { ethers } from 'hardhat';
 import { expect } from 'chai';
-import { Contract, Signer } from 'ethers';
+import { Contract } from 'ethers';
+import { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers';
 
 describe('USDOMultiEVMPoRAddressList Contract', function () {
   let porAddressList: Contract;
-  let owner: Signer;
-  let addr1: Signer;
-  let addr2: Signer;
+  let owner: HardhatEthersSigner;
+  let addr1: HardhatEthersSigner;
+  let addr2: HardhatEthersSigner;
   let addr1Address: string;
   let addr2Address: string;
   let porInfo: any;
 
   beforeEach(async function () {
     [owner, addr1, addr2] = await ethers.getSigners();
-    addr1Address = await addr1.getAddress();
-    addr2Address = await addr2.getAddress();
+    addr1Address = addr1.address;
+    addr2Address = addr2.address;
 
     const PoRAddressList = await ethers.getContractFactory('USDOMultiEVMPoRAddressList');
     porAddressList = await PoRAddressList.deploy();
-    await porAddressList.deployed();
+    await porAddressList.waitForDeployment();
 
     porInfo = [
       {
@@ -27,7 +28,7 @@ describe('USDOMultiEVMPoRAddressList Contract', function () {
         tokenSymbol: 'USDT',
         tokenAddress: addr1Address,
         tokenDecimals: 6,
-        tokenPriceOracle: ethers.constants.AddressZero,
+        tokenPriceOracle: ethers.ZeroAddress,
         yourVaultAddress: addr1Address,
       },
       {
@@ -36,7 +37,7 @@ describe('USDOMultiEVMPoRAddressList Contract', function () {
         tokenSymbol: 'USDC',
         tokenAddress: addr2Address,
         tokenDecimals: 6,
-        tokenPriceOracle: ethers.constants.AddressZero,
+        tokenPriceOracle: ethers.ZeroAddress,
         yourVaultAddress: addr2Address,
       },
       {
@@ -45,7 +46,7 @@ describe('USDOMultiEVMPoRAddressList Contract', function () {
         tokenSymbol: 'TBILL',
         tokenAddress: addr2Address,
         tokenDecimals: 6,
-        tokenPriceOracle: ethers.constants.AddressZero,
+        tokenPriceOracle: ethers.ZeroAddress,
         yourVaultAddress: addr2Address,
       },
     ];

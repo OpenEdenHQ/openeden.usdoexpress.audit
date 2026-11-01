@@ -1,20 +1,21 @@
 import { ethers } from 'hardhat';
 import { expect } from 'chai';
-import { Contract, Signer } from 'ethers';
+import { Contract } from 'ethers';
+import { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers';
 
 describe('USDONonEvmPoRAddressList Contract', function () {
   let porAddressList: Contract;
-  let owner: Signer;
-  let addr1: Signer;
-  let addr2: Signer;
+  let owner: HardhatEthersSigner;
+  let addr1: HardhatEthersSigner;
+  let addr2: HardhatEthersSigner;
   let addr1Address: string;
   let addr2Address: string;
   let testAddresses: string[];
 
   beforeEach(async function () {
     [owner, addr1, addr2] = await ethers.getSigners();
-    addr1Address = await addr1.getAddress();
-    addr2Address = await addr2.getAddress();
+    addr1Address = addr1.address;
+    addr2Address = addr2.address;
 
     // Initialize with some test addresses
     testAddresses = [
@@ -25,7 +26,7 @@ describe('USDONonEvmPoRAddressList Contract', function () {
 
     const PoRAddressList = await ethers.getContractFactory('USDONonEvmPoRAddressList');
     porAddressList = await PoRAddressList.deploy('xrpl', testAddresses);
-    await porAddressList.deployed();
+    await porAddressList.waitForDeployment();
   });
 
   describe('Deployment', function () {

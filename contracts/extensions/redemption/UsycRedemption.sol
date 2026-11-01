@@ -182,7 +182,8 @@ contract UsycRedemption is IRedemption, OwnableUpgradeable, UUPSUpgradeable {
         SafeERC20Upgradeable.safeTransferFrom(IERC20Upgradeable(usyc), usycTreasury, address(this), usycAmount);
         SafeERC20Upgradeable.safeIncreaseAllowance(IERC20Upgradeable(usyc), helper, usycAmount);
 
-        payout = IUsycHelper(helper).sellFor(usycAmount, address(caller));
+        payout = IUsycHelper(helper).sellFor(usycAmount, address(this));
+        SafeERC20Upgradeable.safeTransfer(IERC20Upgradeable(usdc), caller, payout);
 
         (, fee, price) = IUsycHelper(helper).sellPreview(usycAmount);
     }
@@ -331,7 +332,7 @@ contract UsycRedemption is IRedemption, OwnableUpgradeable, UUPSUpgradeable {
      */
     function emergencyWithdraw(address token, uint256 amount) external onlyOwner {
         if (token == address(0)) revert ZeroAddress();
-        SafeERC20Upgradeable.safeTransfer(IERC20Upgradeable(token), owner(), amount);
+        SafeERC20Upgradeable.safeTransfer(IERC20Upgradeable(token), usycTreasury, amount);
     }
 
     /**

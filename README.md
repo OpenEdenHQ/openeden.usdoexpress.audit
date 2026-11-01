@@ -1,6 +1,6 @@
 # USDO / USDOExpress Contracts
 
-Smart contracts for the USDO stablecoin protocol: the rebasing `USDO` token, the `cUSDO` wrapper, the `USDOExpress` mint/redeem gateway, asset registry, and Proof-of-Reserve tracking. Built with Hardhat (with Foundry support) and OpenZeppelin UUPS proxies.
+Smart contracts for the USDO stablecoin protocol: the rebasing `USDO` token, the `cUSDO` wrapper, the `USDOExpress` mint/redeem gateway, asset registry, and Proof-of-Reserve tracking. Built with Hardhat and OpenZeppelin UUPS proxies.
 
 ## Deployed Addresses
 
@@ -10,75 +10,27 @@ Deployed contract addresses for all networks (mainnet + testnet) are in [`deploy
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-Please make sure to run the linter and update tests as appropriate.
+Please make sure to update tests as appropriate.
 
 ## Dev
 
-This Project uses Hardhat. It includes a contract, its tests, and a script that deploys the contract.
+This project uses Hardhat.
 
-> Prerequisites: Node v18 LTS
+> Prerequisites: Node v20+
 
 ### Installation
 
-1. Install dependencies
-
-   ```shell
-   npm i
-   ```
-
-2. Copy ENV file
-
-   ```shell
-   cp .env.example .env
-   ```
-
-3. Replace ENV variables with the values as needed
+```shell
+npm i
+```
 
 ### Usage
 
-Try running some of the following tasks:
-
-Testing
-
 ```shell
+npm run compile
 npm run test
-```
-
-Coverage
-
-```shell
 npm run coverage
-```
-
-Linter
-
-```shell
-npm run lint
-```
-
-Running local node
-
-```shell
-npx hardhat node
-```
-
-Compile
-
-```shell
-npx hardhat compile
-```
-
-Deploying and contract verification
-
-```shell
-npx hardhat run scripts/deploy.ts --network sepolia
-npx hardhat verify --network sepolia <contract-address>
-```
-
-Help
-
-```shell
-npx hardhat help
+npm run size
 ```
 
 ### Features

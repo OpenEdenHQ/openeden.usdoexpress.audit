@@ -1,17 +1,16 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
-import { BigNumber } from 'ethers';
-import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 import { USDOPoRAssetsTracking } from '../typechain-types';
+import { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers';
 
 describe('USDOPoRAssetsTracking', function () {
   let tracking: USDOPoRAssetsTracking;
-  let admin: SignerWithAddress;
-  let operator: SignerWithAddress;
-  let user: SignerWithAddress;
-  let token1: SignerWithAddress;
-  let token2: SignerWithAddress;
-  let token3: SignerWithAddress;
+  let admin: HardhatEthersSigner;
+  let operator: HardhatEthersSigner;
+  let user: HardhatEthersSigner;
+  let token1: HardhatEthersSigner;
+  let token2: HardhatEthersSigner;
+  let token3: HardhatEthersSigner;
   let OPERATOR_ROLE: string;
 
   beforeEach(async function () {
@@ -19,7 +18,7 @@ describe('USDOPoRAssetsTracking', function () {
 
     const USDOPoRAssetsTracking = await ethers.getContractFactory('USDOPoRAssetsTracking');
     tracking = (await USDOPoRAssetsTracking.deploy(admin.address, operator.address)) as USDOPoRAssetsTracking;
-    await tracking.deployed();
+    await tracking.waitForDeployment();
 
     OPERATOR_ROLE = await tracking.OPERATOR_ROLE();
   });
@@ -36,12 +35,14 @@ describe('USDOPoRAssetsTracking', function () {
 
     it('should revert when deploying with zero addresses', async function () {
       const USDOPoRAssetsTracking = await ethers.getContractFactory('USDOPoRAssetsTracking');
-      await expect(
-        USDOPoRAssetsTracking.deploy(ethers.constants.AddressZero, operator.address),
-      ).to.be.revertedWithCustomError(tracking, 'ZeroAddress');
-      await expect(
-        USDOPoRAssetsTracking.deploy(admin.address, ethers.constants.AddressZero),
-      ).to.be.revertedWithCustomError(tracking, 'ZeroAddress');
+      await expect(USDOPoRAssetsTracking.deploy(ethers.ZeroAddress, operator.address)).to.be.revertedWithCustomError(
+        tracking,
+        'ZeroAddress',
+      );
+      await expect(USDOPoRAssetsTracking.deploy(admin.address, ethers.ZeroAddress)).to.be.revertedWithCustomError(
+        tracking,
+        'ZeroAddress',
+      );
     });
   });
 
@@ -71,7 +72,7 @@ describe('USDOPoRAssetsTracking', function () {
       });
 
       it('should revert when adding zero address', async function () {
-        const assets: string[] = [ethers.constants.AddressZero];
+        const assets: string[] = [ethers.ZeroAddress];
         await expect(tracking.connect(operator).addSupportAsset(assets)).to.be.revertedWithCustomError(
           tracking,
           'ZeroAddress',
@@ -161,7 +162,7 @@ describe('USDOPoRAssetsTracking', function () {
         .to.emit(tracking, 'Increase')
         .withArgs(token1.address, 1000);
 
-      let pendingAmount: BigNumber = await tracking.getPending();
+      let pendingAmount: bigint = await tracking.getPending();
       expect(pendingAmount).to.equal(1000);
 
       // Test decrease
@@ -244,7 +245,7 @@ describe('USDOPoRAssetsTracking', function () {
       await tracking.connect(operator).decrease(token2.address, 1000);
 
       // Verify final state
-      const pendingAmount: BigNumber = await tracking.getPending();
+      const pendingAmount: bigint = await tracking.getPending();
       expect(pendingAmount).to.equal(1500); // 1000 - 500 + 2000 - 1000 = 1500
     });
 

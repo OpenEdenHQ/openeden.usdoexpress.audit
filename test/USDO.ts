@@ -1,27 +1,23 @@
 import { expect } from 'chai';
 import { ethers, upgrades } from 'hardhat';
-import { Contract, BigNumber, constants } from 'ethers';
-import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
+import type { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers';
 import { loadFixture, time } from '@nomicfoundation/hardhat-network-helpers';
 import { TypedDataDomain, TypedDataField } from '@ethersproject/abstract-signer';
-import { parseUnits, keccak256, toUtf8Bytes, defaultAbiCoder, id, splitSignature } from 'ethers/lib/utils';
-
-const { AddressZero, MaxUint256 } = constants;
 
 const roles = {
-  MINTER: keccak256(toUtf8Bytes('MINTER_ROLE')),
-  BURNER: keccak256(toUtf8Bytes('BURNER_ROLE')),
-  BANLIST: keccak256(toUtf8Bytes('BANLIST_ROLE')),
-  MULTIPLIER: keccak256(toUtf8Bytes('MULTIPLIER_ROLE')),
-  UPGRADE: keccak256(toUtf8Bytes('UPGRADE_ROLE')),
-  PAUSE: keccak256(toUtf8Bytes('PAUSE_ROLE')),
-  DEFAULT_ADMIN_ROLE: ethers.constants.HashZero,
+  MINTER: ethers.keccak256(ethers.toUtf8Bytes('MINTER_ROLE')),
+  BURNER: ethers.keccak256(ethers.toUtf8Bytes('BURNER_ROLE')),
+  BANLIST: ethers.keccak256(ethers.toUtf8Bytes('BANLIST_ROLE')),
+  MULTIPLIER: ethers.keccak256(ethers.toUtf8Bytes('MULTIPLIER_ROLE')),
+  UPGRADE: ethers.keccak256(ethers.toUtf8Bytes('UPGRADE_ROLE')),
+  PAUSE: ethers.keccak256(ethers.toUtf8Bytes('PAUSE_ROLE')),
+  DEFAULT_ADMIN_ROLE: ethers.ZeroHash,
 };
 
 describe('USDO', () => {
   const name = 'OpenEden Protocol USD';
   const symbol = 'USDO';
-  const totalShares = parseUnits('1000');
+  const totalShares = ethers.parseUnits('1000');
 
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
@@ -36,7 +32,7 @@ describe('USDO', () => {
     });
 
     // Set a high cap to allow initial minting
-    await contract.updateTotalSupplyCap(parseUnits('10000000000')); // 10 billion USDO
+    await contract.updateTotalSupplyCap(ethers.parseUnits('10000000000')); // 10 billion USDO
 
     await contract.grantRole(roles.MINTER, owner.address);
     await contract.mint(owner.address, totalShares);
@@ -98,7 +94,7 @@ describe('USDO', () => {
     it('sets bonus multiplier to 100%', async () => {
       const { contract } = await loadFixture(deployUSDOFixture);
 
-      expect(await contract.bonusMultiplier()).to.equal(parseUnits('1')); // 1 equals to 100%
+      expect(await contract.bonusMultiplier()).to.equal(ethers.parseUnits('1')); // 1 equals to 100%
     });
 
     it('fails if initialize is called again after initialization', async () => {
@@ -113,20 +109,20 @@ describe('USDO', () => {
   describe('Transfer', () => {
     it('transfers tokens from one account to another', async () => {
       const { contract, owner, acc1, acc2 } = await loadFixture(deployUSDOFixture);
-      const amount = parseUnits('10');
+      const amount = ethers.parseUnits('10');
 
       await expect(contract.transfer(acc1.address, amount)).to.changeTokenBalances(
         contract,
         [owner, acc1],
-        [amount.mul(-1), amount],
+        [-amount, amount],
       );
 
-      const amount2 = parseUnits('5');
+      const amount2 = ethers.parseUnits('5');
 
       await expect(contract.connect(acc1).transfer(acc2.address, amount2)).to.changeTokenBalances(
         contract,
         [acc1, acc2],
-        [amount2.mul(-1), amount2],
+        [-amount2, amount2],
       );
     });
 
@@ -135,58 +131,58 @@ describe('USDO', () => {
 
       const balance = await contract.balanceOf(owner.address);
 
-      await expect(contract.transfer(acc1.address, balance.add(1)))
+      await expect(contract.transfer(acc1.address, balance + 1n))
         .to.be.revertedWithCustomError(contract, 'ERC20InsufficientBalance')
-        .withArgs(owner.address, balance, balance.add(1));
+        .withArgs(owner.address, balance, balance + 1n);
     });
 
     it('emits a transfer events', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
 
       const to = acc1.address;
-      const amount = parseUnits('1');
+      const amount = ethers.parseUnits('1');
 
       await expect(contract.transfer(to, amount)).to.emit(contract, 'Transfer').withArgs(owner.address, to, amount);
     });
 
     it('reverts when transfer from the zero address', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
-      const signerZero = await ethers.getImpersonatedSigner(AddressZero);
+      const signerZero = await ethers.getImpersonatedSigner(ethers.ZeroAddress);
 
       // Fund the zero address to pay for the transaction
       await owner.sendTransaction({
         to: signerZero.address,
-        value: parseUnits('1'), // Send 1 ETH
+        value: ethers.parseUnits('1'), // Send 1 ETH
       });
 
       await expect(contract.connect(signerZero).transfer(signerZero.address, 1))
         .to.be.revertedWithCustomError(contract, 'ERC20InvalidSender')
-        .withArgs(AddressZero);
+        .withArgs(ethers.ZeroAddress);
     });
 
     it('reverts when transfer to the zero address', async () => {
       const { contract } = await loadFixture(deployUSDOFixture);
 
-      const amount = parseUnits('1');
+      const amount = ethers.parseUnits('1');
 
-      await expect(contract.transfer(AddressZero, amount))
+      await expect(contract.transfer(ethers.ZeroAddress, amount))
         .to.be.revertedWithCustomError(contract, 'ERC20InvalidReceiver')
-        .withArgs(AddressZero);
+        .withArgs(ethers.ZeroAddress);
     });
 
     it('takes tokens amount as argument but transfers shares', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
-      const amount = parseUnits('100');
-      const bonusMultiplier = parseUnits('1.0001'); // 1bps
+      const amount = ethers.parseUnits('100');
+      const bonusMultiplier = ethers.parseUnits('1.0001'); // 1bps
       const sharesBeforeTransfer = await contract.sharesOf(owner.address);
-      const sharesAmount = amount.mul(parseUnits('1')).div(bonusMultiplier);
+      const sharesAmount = (amount * ethers.parseUnits('1')) / bonusMultiplier;
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
       await contract.updateBonusMultiplier(bonusMultiplier);
       await contract.transfer(acc1.address, amount);
 
       expect(await contract.sharesOf(acc1.address)).to.equal(sharesAmount);
-      expect(await contract.sharesOf(owner.address)).to.equal(sharesBeforeTransfer.sub(sharesAmount));
+      expect(await contract.sharesOf(owner.address)).to.equal(sharesBeforeTransfer - sharesAmount);
     });
   });
 
@@ -343,7 +339,7 @@ describe('USDO', () => {
     it('does not upgrade without upgrade role', async () => {
       const { contract, acc1 } = await loadFixture(deployUSDOFixture);
 
-      await expect(contract.connect(acc1).upgradeTo(AddressZero)).to.be.revertedWith(
+      await expect(contract.connect(acc1).upgradeTo(ethers.ZeroAddress)).to.be.revertedWith(
         `AccessControl: account ${acc1.address.toLowerCase()} is missing role ${roles.UPGRADE}`,
       );
     });
@@ -353,7 +349,7 @@ describe('USDO', () => {
 
       await contract.grantRole(roles.UPGRADE, acc1.address);
 
-      await expect(contract.connect(acc1).upgradeTo(AddressZero)).to.not.be.revertedWith(
+      await expect(contract.connect(acc1).upgradeTo(ethers.ZeroAddress)).to.not.be.revertedWith(
         `AccessControl: account ${acc1.address.toLowerCase()} is missing role ${roles.UPGRADE}`,
       );
     });
@@ -469,7 +465,7 @@ describe('USDO', () => {
   describe('Pause', () => {
     it('allows minting when unpaused', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
-      const tokensAmount = parseUnits('10');
+      const tokensAmount = ethers.parseUnits('10');
 
       await contract.grantRole(roles.MINTER, owner.address);
       await contract.grantRole(roles.PAUSE, owner.address);
@@ -484,7 +480,7 @@ describe('USDO', () => {
 
     it('does not allow minting when paused', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
-      const tokensAmount = parseUnits('10');
+      const tokensAmount = ethers.parseUnits('10');
 
       await contract.grantRole(roles.MINTER, owner.address);
       await contract.grantRole(roles.PAUSE, owner.address);
@@ -498,7 +494,7 @@ describe('USDO', () => {
 
     it('allows burning when unpaused', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
-      const tokensAmount = parseUnits('10');
+      const tokensAmount = ethers.parseUnits('10');
 
       await contract.grantRole(roles.BURNER, owner.address);
       await contract.grantRole(roles.PAUSE, owner.address);
@@ -513,7 +509,7 @@ describe('USDO', () => {
 
     it('does not allow burning when paused', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
-      const tokensAmount = parseUnits('10');
+      const tokensAmount = ethers.parseUnits('10');
 
       await contract.grantRole(roles.BURNER, owner.address);
       await contract.grantRole(roles.PAUSE, owner.address);
@@ -527,7 +523,7 @@ describe('USDO', () => {
 
     it('allows transfers when unpaused', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
-      const tokensAmount = parseUnits('10');
+      const tokensAmount = ethers.parseUnits('10');
 
       await contract.grantRole(roles.PAUSE, owner.address);
       await contract.pause();
@@ -541,7 +537,7 @@ describe('USDO', () => {
 
     it('does not allow transfers when paused', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
-      const tokensAmount = parseUnits('10');
+      const tokensAmount = ethers.parseUnits('10');
 
       await contract.grantRole(roles.PAUSE, owner.address);
       await contract.pause();
@@ -557,8 +553,8 @@ describe('USDO', () => {
     // Error should always fall 7 orders of magnitud below than one cent of a dollar (1 GWEI)
     // Inaccuracy stems from using fixed-point arithmetic and Solidity's 18-decimal support
     // resulting in periodic number approximations during divisions
-    const expectEqualWithError = (actual: BigNumber, expected: BigNumber, error = '0.000000001') => {
-      expect(actual).to.be.closeTo(expected, parseUnits(error));
+    const expectEqualWithError = (actual: bigint, expected: bigint, error = '0.000000001') => {
+      expect(actual).to.be.closeTo(expected, ethers.parseUnits(error));
     };
 
     it('does not support adding a bonus multiplier lower than zero', async () => {
@@ -576,9 +572,9 @@ describe('USDO', () => {
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
-      const bonusMultiplierIncrement = parseUnits('0.0001');
+      const bonusMultiplierIncrement = ethers.parseUnits('0.0001');
       const bonusMultiplier = await contract.bonusMultiplier();
-      const expected = bonusMultiplier.add(bonusMultiplierIncrement);
+      const expected = bonusMultiplier + bonusMultiplierIncrement;
 
       await expect(contract.addBonusMultiplier(bonusMultiplierIncrement))
         .to.emit(contract, 'BonusMultiplier')
@@ -592,7 +588,7 @@ describe('USDO', () => {
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
-      const bonusMultiplier = parseUnits('1.0001');
+      const bonusMultiplier = ethers.parseUnits('1.0001');
 
       await expect(contract.updateBonusMultiplier(bonusMultiplier))
         .to.emit(contract, 'BonusMultiplier')
@@ -606,7 +602,7 @@ describe('USDO', () => {
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
-      const bonusMultiplier = parseUnits('0.99999'); // 1 equals to 100%
+      const bonusMultiplier = ethers.parseUnits('0.99999'); // 1 equals to 100%
 
       await expect(contract.updateBonusMultiplier(bonusMultiplier))
         .to.be.revertedWithCustomError(contract, 'USDOInvalidBonusMultiplier')
@@ -615,7 +611,7 @@ describe('USDO', () => {
 
     it('updates the total supply according to the new bonus multiplier', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
-      const bonusMultiplier = parseUnits('1.0001');
+      const bonusMultiplier = ethers.parseUnits('1.0001');
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
@@ -623,24 +619,24 @@ describe('USDO', () => {
 
       await contract.updateBonusMultiplier(bonusMultiplier);
 
-      const expected = totalShares.mul(bonusMultiplier).div(parseUnits('1'));
+      const expected = (totalShares * bonusMultiplier) / ethers.parseUnits('1');
 
       expect(await contract.totalSupply()).to.equal(expected);
     });
 
     it('mints by tokens amount not by shares', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
-      const bonusMultiplierIncrement = parseUnits('0.0004'); // 4bps
+      const bonusMultiplierIncrement = ethers.parseUnits('0.0004'); // 4bps
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
       await contract.grantRole(roles.MINTER, owner.address);
 
-      const amount = parseUnits('1000'); // 1k USDO
+      const amount = ethers.parseUnits('1000'); // 1k USDO
 
       await contract.mint(acc1.address, amount); // Mint 1k
       await contract.addBonusMultiplier(bonusMultiplierIncrement);
 
-      const expected = amount.mul(bonusMultiplierIncrement).div(parseUnits('1')).add(amount);
+      const expected = (amount * bonusMultiplierIncrement) / ethers.parseUnits('1') + amount;
 
       expectEqualWithError(await contract.balanceOf(acc1.address), expected);
     });
@@ -653,8 +649,8 @@ describe('USDO', () => {
 
       // Absurd worst case scenario is used to test the decimal accuracy of the contract
       // Mint 1 USDO and set 4bps as bonus multiplier everyday for 5 years
-      const bonusMultiplierIncrement = parseUnits('0.001'); // 10bps
-      const amount = parseUnits('1'); // 1 USDO
+      const bonusMultiplierIncrement = ethers.parseUnits('0.001'); // 10bps
+      const amount = ethers.parseUnits('1'); // 1 USDO
       const DAYS_IN_FIVE_YEARS = 365 * 5; // 5 years
 
       for (let i = 0; i < DAYS_IN_FIVE_YEARS; i++) {
@@ -663,14 +659,14 @@ describe('USDO', () => {
       }
 
       // Expected is calculated as follows:
-      let expected = BigNumber.from(0);
-      let bonusMultiplier = parseUnits('1');
+      let expected = 0n;
+      let bonusMultiplier = ethers.parseUnits('1');
 
       for (let i = 0; i < DAYS_IN_FIVE_YEARS; i++) {
         const prevbonusMultiplier = bonusMultiplier;
-        const newbonusMultiplier = bonusMultiplier.add(bonusMultiplierIncrement);
+        const newbonusMultiplier = bonusMultiplier + bonusMultiplierIncrement;
 
-        expected = expected.add(amount).mul(newbonusMultiplier).div(prevbonusMultiplier);
+        expected = ((expected + amount) * newbonusMultiplier) / prevbonusMultiplier;
         bonusMultiplier = newbonusMultiplier;
       }
 
@@ -681,33 +677,35 @@ describe('USDO', () => {
   describe('Balance', () => {
     it('returns the amount of tokens, not shares', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
-      const tokensAmount = parseUnits('10');
-      const bonusMultiplier = parseUnits('1.0001');
+      const tokensAmount = ethers.parseUnits('10');
+      const bonusMultiplier = ethers.parseUnits('1.0001');
 
       await contract.grantRole(roles.MINTER, owner.address);
       await contract.grantRole(roles.MULTIPLIER, owner.address);
       await contract.mint(acc1.address, tokensAmount);
       await contract.updateBonusMultiplier(bonusMultiplier);
 
-      expect(await contract.balanceOf(acc1.address)).to.equal(tokensAmount.mul(bonusMultiplier).div(parseUnits('1')));
+      expect(await contract.balanceOf(acc1.address)).to.equal(
+        (tokensAmount * bonusMultiplier) / ethers.parseUnits('1'),
+      );
     });
 
     it('should enforce supply cap when adding bonus multiplier', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
 
       // Set a low supply cap
-      const lowCap = parseUnits('1500'); // 1500 USDO
+      const lowCap = ethers.parseUnits('1500'); // 1500 USDO
       await contract.updateTotalSupplyCap(lowCap);
 
       // Grant multiplier role
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
       // Current total supply is 1000 USDO (from fixture)
-      expect(await contract.totalSupply()).to.equal(parseUnits('1000'));
+      expect(await contract.totalSupply()).to.equal(ethers.parseUnits('1000'));
 
       // Try to add a multiplier that would exceed the cap
       // 1000 * 1.6 = 1600 > 1500 cap
-      const largeIncrement = parseUnits('0.6', 18); // 60% increase
+      const largeIncrement = ethers.parseUnits('0.6', 18); // 60% increase
 
       await expect(contract.addBonusMultiplier(largeIncrement)).to.be.revertedWithCustomError(
         contract,
@@ -719,15 +717,15 @@ describe('USDO', () => {
       const { contract } = await loadFixture(deployUSDOFixture);
 
       // Set a low supply cap
-      const lowCap = parseUnits('1200'); // 1200 USDO
+      const lowCap = ethers.parseUnits('1200'); // 1200 USDO
       await contract.updateTotalSupplyCap(lowCap);
 
       // Current total supply is 1000 USDO
-      expect(await contract.totalSupply()).to.equal(parseUnits('1000'));
+      expect(await contract.totalSupply()).to.equal(ethers.parseUnits('1000'));
 
       // Try to set a multiplier that would exceed the cap
       // 1000 * 1.3 = 1300 > 1200 cap
-      const highMultiplier = parseUnits('1.3', 18); // 130%
+      const highMultiplier = ethers.parseUnits('1.3', 18); // 130%
 
       await expect(contract.updateBonusMultiplier(highMultiplier)).to.be.revertedWithCustomError(
         contract,
@@ -739,41 +737,41 @@ describe('USDO', () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
 
       // Set a reasonable supply cap
-      const cap = parseUnits('1100'); // 1100 USDO
+      const cap = ethers.parseUnits('1100'); // 1100 USDO
       await contract.updateTotalSupplyCap(cap);
 
       // Grant multiplier role
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
       // Current total supply is 1000 USDO
-      expect(await contract.totalSupply()).to.equal(parseUnits('1000'));
+      expect(await contract.totalSupply()).to.equal(ethers.parseUnits('1000'));
 
       // Add a small multiplier that stays within cap
       // 1000 * 1.05 = 1050 < 1100 cap
-      const smallIncrement = parseUnits('0.05', 18); // 5% increase
+      const smallIncrement = ethers.parseUnits('0.05', 18); // 5% increase
 
       await expect(contract.addBonusMultiplier(smallIncrement)).to.emit(contract, 'BonusMultiplier');
 
-      expect(await contract.totalSupply()).to.be.closeTo(parseUnits('1050'), parseUnits('0.001'));
+      expect(await contract.totalSupply()).to.be.closeTo(ethers.parseUnits('1050'), ethers.parseUnits('0.001'));
     });
 
     it('should prevent supply cap bypass through multiple small increments', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
 
       // Set a strict supply cap
-      const cap = parseUnits('1050'); // 1050 USDO
+      const cap = ethers.parseUnits('1050'); // 1050 USDO
       await contract.updateTotalSupplyCap(cap);
 
       // Grant multiplier role
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
       // Add a multiplier that gets close to the cap
-      const firstIncrement = parseUnits('0.04', 18); // 4% increase -> 1040 USDO
+      const firstIncrement = ethers.parseUnits('0.04', 18); // 4% increase -> 1040 USDO
       await contract.addBonusMultiplier(firstIncrement);
-      expect(await contract.totalSupply()).to.be.closeTo(parseUnits('1040'), parseUnits('0.001'));
+      expect(await contract.totalSupply()).to.be.closeTo(ethers.parseUnits('1040'), ethers.parseUnits('0.001'));
 
       // Try to add another increment that would exceed the cap
-      const secondIncrement = parseUnits('0.02', 18); // 2% more -> would be ~1061 USDO
+      const secondIncrement = ethers.parseUnits('0.02', 18); // 2% more -> would be ~1061 USDO
       await expect(contract.addBonusMultiplier(secondIncrement)).to.be.revertedWithCustomError(
         contract,
         'USDOExceedsTotalSupplyCap',
@@ -785,22 +783,22 @@ describe('USDO', () => {
 
       // Mint additional tokens to test with more shares
       await contract.grantRole(roles.MINTER, owner.address);
-      await contract.mint(acc1.address, parseUnits('500')); // Now 1500 total supply
+      await contract.mint(acc1.address, ethers.parseUnits('500')); // Now 1500 total supply
       await contract.revokeRole(roles.MINTER, owner.address);
 
       // Set cap slightly above current supply
-      const cap = parseUnits('1600'); // 1600 USDO
+      const cap = ethers.parseUnits('1600'); // 1600 USDO
       await contract.updateTotalSupplyCap(cap);
 
       // Grant multiplier role
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
       // Current total supply is 1500 USDO
-      expect(await contract.totalSupply()).to.equal(parseUnits('1500'));
+      expect(await contract.totalSupply()).to.equal(ethers.parseUnits('1500'));
 
       // Try to add multiplier that would exceed cap
       // 1500 * 1.08 = 1620 > 1600 cap
-      const increment = parseUnits('0.08', 18); // 8% increase
+      const increment = ethers.parseUnits('0.08', 18); // 8% increase
 
       await expect(contract.addBonusMultiplier(increment)).to.be.revertedWithCustomError(
         contract,
@@ -809,7 +807,7 @@ describe('USDO', () => {
 
       // But a smaller increment should work
       // 1500 * 1.06 = 1590 < 1600 cap
-      const smallerIncrement = parseUnits('0.06', 18); // 6% increase
+      const smallerIncrement = ethers.parseUnits('0.06', 18); // 6% increase
       await expect(contract.addBonusMultiplier(smallerIncrement)).to.emit(contract, 'BonusMultiplier');
     });
   });
@@ -825,42 +823,42 @@ describe('USDO', () => {
     it('does not change amount of shares when updating the bonus multiplier', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
 
-      const sharesAmount = parseUnits('1');
+      const sharesAmount = ethers.parseUnits('1');
 
       await contract.grantRole(roles.MINTER, owner.address);
       await contract.grantRole(roles.MULTIPLIER, owner.address);
       await contract.mint(acc1.address, sharesAmount);
 
-      await contract.updateBonusMultiplier(parseUnits('1.0001'));
+      await contract.updateBonusMultiplier(ethers.parseUnits('1.0001'));
 
       expect(await contract.sharesOf(acc1.address)).to.equal(sharesAmount);
     });
 
     it('returns the amount of shares based on tokens', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
-      const amount = parseUnits('14');
-      const bonusMultiplier = parseUnits('1.0001');
+      const amount = ethers.parseUnits('14');
+      const bonusMultiplier = ethers.parseUnits('1.0001');
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
       await contract.updateBonusMultiplier(bonusMultiplier);
 
       expect(await contract.convertToShares(amount)).to.equal(
         // We use fixed-point arithmetic to avoid precision issues
-        amount.mul(parseUnits('1')).div(bonusMultiplier),
+        (amount * ethers.parseUnits('1')) / bonusMultiplier,
       );
     });
 
     it('returns the amount of tokens based on shares', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
-      const shares = parseUnits('14');
-      const bonusMultiplier = parseUnits('1.0001');
+      const shares = ethers.parseUnits('14');
+      const bonusMultiplier = ethers.parseUnits('1.0001');
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
       await contract.updateBonusMultiplier(bonusMultiplier);
 
       expect(await contract.convertToTokens(shares)).to.equal(
         // We use fixed-point arithmetic to avoid precision issues
-        shares.mul(bonusMultiplier).div(parseUnits('1')),
+        (shares * bonusMultiplier) / ethers.parseUnits('1'),
       );
     });
   });
@@ -872,11 +870,11 @@ describe('USDO', () => {
       await contract.grantRole(roles.MINTER, owner.address);
 
       const totalShares = await contract.totalShares();
-      const amount = parseUnits('1');
+      const amount = ethers.parseUnits('1');
 
       await contract.mint(owner.address, amount);
 
-      expect(await contract.totalShares()).to.equal(totalShares.add(amount));
+      expect(await contract.totalShares()).to.equal(totalShares + amount);
     });
 
     it('increments total supply', async () => {
@@ -885,11 +883,11 @@ describe('USDO', () => {
       await contract.grantRole(roles.MINTER, owner.address);
 
       const totalSupply = await contract.totalSupply();
-      const amount = parseUnits('1');
+      const amount = ethers.parseUnits('1');
 
       await contract.mint(owner.address, amount);
 
-      expect(await contract.totalSupply()).to.equal(totalSupply.add(amount));
+      expect(await contract.totalSupply()).to.equal(totalSupply + amount);
     });
 
     it('emits a transfer event', async () => {
@@ -897,11 +895,11 @@ describe('USDO', () => {
 
       await contract.grantRole(roles.MINTER, owner.address);
 
-      const amount = parseUnits('1');
+      const amount = ethers.parseUnits('1');
 
       await expect(contract.mint(owner.address, amount))
         .to.emit(contract, 'Transfer')
-        .withArgs(AddressZero, owner.address, amount);
+        .withArgs(ethers.ZeroAddress, owner.address, amount);
     });
 
     it('emits a transfer event with amount of tokens not shares', async () => {
@@ -910,13 +908,13 @@ describe('USDO', () => {
       await contract.grantRole(roles.MINTER, owner.address);
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
-      const amount = parseUnits('1000');
+      const amount = ethers.parseUnits('1000');
 
-      await contract.addBonusMultiplier(parseUnits('0.0001')); // 1bps
+      await contract.addBonusMultiplier(ethers.parseUnits('0.0001')); // 1bps
 
       await expect(contract.mint(owner.address, amount))
         .to.emit(contract, 'Transfer')
-        .withArgs(AddressZero, owner.address, amount);
+        .withArgs(ethers.ZeroAddress, owner.address, amount);
     });
 
     it('mints shares to correct address', async () => {
@@ -924,7 +922,7 @@ describe('USDO', () => {
 
       await contract.grantRole(roles.MINTER, owner.address);
 
-      const amount = parseUnits('1');
+      const amount = ethers.parseUnits('1');
 
       await contract.mint(acc1.address, amount);
 
@@ -936,11 +934,11 @@ describe('USDO', () => {
 
       await contract.grantRole(roles.MINTER, owner.address);
 
-      const amount = parseUnits('1');
+      const amount = ethers.parseUnits('1');
 
-      await expect(contract.mint(AddressZero, amount))
+      await expect(contract.mint(ethers.ZeroAddress, amount))
         .to.be.revertedWithCustomError(contract, 'USDOInvalidMintReceiver')
-        .withArgs(AddressZero);
+        .withArgs(ethers.ZeroAddress);
     });
   });
 
@@ -955,7 +953,7 @@ describe('USDO', () => {
 
       await contract.burn(owner.address, burnAmount);
 
-      expect(await contract.sharesOf(owner.address)).to.equal(accountShares.sub(burnAmount));
+      expect(await contract.sharesOf(owner.address)).to.equal(accountShares - BigInt(burnAmount));
     });
 
     it('decrements total shares quantity', async () => {
@@ -968,7 +966,7 @@ describe('USDO', () => {
 
       await contract.burn(owner.address, amount);
 
-      expect(await contract.totalShares()).to.equal(totalShares.sub(amount));
+      expect(await contract.totalShares()).to.equal(totalShares - BigInt(amount));
     });
 
     it('does not allow burning from null address', async () => {
@@ -976,9 +974,9 @@ describe('USDO', () => {
 
       await contract.grantRole(roles.BURNER, owner.address);
 
-      await expect(contract.burn(AddressZero, 1))
+      await expect(contract.burn(ethers.ZeroAddress, 1))
         .to.be.revertedWithCustomError(contract, 'USDOInvalidBurnSender')
-        .withArgs(AddressZero);
+        .withArgs(ethers.ZeroAddress);
     });
 
     it('does not allow burning when amount exceeds balance', async () => {
@@ -987,9 +985,9 @@ describe('USDO', () => {
       await contract.grantRole(roles.BURNER, owner.address);
       const balance = await contract.balanceOf(owner.address);
 
-      await expect(contract.burn(owner.address, balance.add(1)))
+      await expect(contract.burn(owner.address, balance + 1n))
         .to.be.revertedWithCustomError(contract, 'USDOInsufficientBurnBalance')
-        .withArgs(owner.address, balance, balance.add(1));
+        .withArgs(owner.address, balance, balance + 1n);
     });
 
     it('emits a transfer events', async () => {
@@ -1001,7 +999,7 @@ describe('USDO', () => {
 
       await expect(contract.burn(owner.address, amount))
         .to.emit(contract, 'Transfer')
-        .withArgs(owner.address, AddressZero, amount);
+        .withArgs(owner.address, ethers.ZeroAddress, amount);
     });
 
     it('emits a transfer event with amount of tokens not shares', async () => {
@@ -1010,38 +1008,38 @@ describe('USDO', () => {
       await contract.grantRole(roles.BURNER, owner.address);
       await contract.grantRole(roles.MULTIPLIER, owner.address);
 
-      const amount = parseUnits('1000');
+      const amount = ethers.parseUnits('1000');
 
-      await contract.addBonusMultiplier(parseUnits('0.0001')); // 1bps
+      await contract.addBonusMultiplier(ethers.parseUnits('0.0001')); // 1bps
 
       await expect(contract.burn(owner.address, amount))
         .to.emit(contract, 'Transfer')
-        .withArgs(owner.address, AddressZero, amount);
+        .withArgs(owner.address, ethers.ZeroAddress, amount);
     });
   });
 
   describe('Approve', () => {
     it('reverts when owner is the zero address', async () => {
       const { contract, owner } = await loadFixture(deployUSDOFixture);
-      const signerZero = await ethers.getImpersonatedSigner(AddressZero);
+      const signerZero = await ethers.getImpersonatedSigner(ethers.ZeroAddress);
 
       // Fund the zero address to pay for the transaction
       await owner.sendTransaction({
         to: signerZero.address,
-        value: parseUnits('1'), // Send 1 ETH
+        value: ethers.parseUnits('1'), // Send 1 ETH
       });
 
-      await expect(contract.connect(signerZero).approve(AddressZero, 1))
+      await expect(contract.connect(signerZero).approve(ethers.ZeroAddress, 1))
         .to.revertedWithCustomError(contract, 'ERC20InvalidApprover')
-        .withArgs(AddressZero);
+        .withArgs(ethers.ZeroAddress);
     });
 
     it('reverts when spender is the zero address', async () => {
       const { contract } = await loadFixture(deployUSDOFixture);
 
-      await expect(contract.approve(AddressZero, 1))
+      await expect(contract.approve(ethers.ZeroAddress, 1))
         .to.revertedWithCustomError(contract, 'ERC20InvalidSpender')
-        .withArgs(AddressZero);
+        .withArgs(ethers.ZeroAddress);
     });
 
     it('emits an approval event', async () => {
@@ -1106,9 +1104,9 @@ describe('USDO', () => {
       const { contract } = await loadFixture(deployUSDOFixture);
       const amount = 1;
 
-      await expect(contract.increaseAllowance(AddressZero, amount))
+      await expect(contract.increaseAllowance(ethers.ZeroAddress, amount))
         .to.be.revertedWithCustomError(contract, 'ERC20InvalidSpender')
-        .withArgs(AddressZero);
+        .withArgs(ethers.ZeroAddress);
     });
   });
 
@@ -1177,11 +1175,11 @@ describe('USDO', () => {
       const from = owner.address;
       const to = acc1.address;
 
-      await contract.approve(to, MaxUint256);
+      await contract.approve(to, ethers.MaxUint256);
 
       await expect(contract.connect(acc1).transferFrom(from, to, 1)).to.not.emit(contract, 'Approval');
 
-      expect(await contract.allowance(from, to)).to.be.equal(MaxUint256);
+      expect(await contract.allowance(from, to)).to.be.equal(ethers.MaxUint256);
     });
 
     it('transfers the requested amount when has enough allowance', async () => {
@@ -1255,21 +1253,21 @@ describe('USDO', () => {
       const to = acc1.address;
       const amount = await contract.balanceOf(from);
 
-      await contract.approve(to, amount.add(1));
+      await contract.approve(to, amount + 1n);
 
-      await expect(contract.connect(acc1).transferFrom(from, to, amount.add(1)))
+      await expect(contract.connect(acc1).transferFrom(from, to, amount + 1n))
         .to.be.revertedWithCustomError(contract, 'ERC20InsufficientBalance')
-        .withArgs(from, amount, amount.add(1));
+        .withArgs(from, amount, amount + 1n);
     });
 
     it('decreases allowance by amount of tokens, not by shares', async () => {
       const { contract, owner, acc1 } = await loadFixture(deployUSDOFixture);
       const from = owner.address;
       const to = acc1.address;
-      const amount = parseUnits('1');
+      const amount = ethers.parseUnits('1');
 
       await contract.grantRole(roles.MULTIPLIER, owner.address);
-      await contract.addBonusMultiplier(parseUnits('0.0004')); // 4bps
+      await contract.addBonusMultiplier(ethers.parseUnits('0.0004')); // 4bps
       await contract.approve(to, amount);
       await contract.connect(acc1).transferFrom(from, to, amount);
 
@@ -1279,18 +1277,18 @@ describe('USDO', () => {
 
   describe('Permit', () => {
     const buildData = async (
-      contract: Contract,
-      owner: SignerWithAddress,
-      spender: SignerWithAddress,
+      contract: any,
+      owner: HardhatEthersSigner,
+      spender: HardhatEthersSigner,
       value: number,
       nonce: number,
-      deadline: number | BigNumber,
+      deadline: number | bigint,
     ) => {
       const domain = {
         name: await contract.name(),
         version: '1',
-        chainId: (await contract.provider.getNetwork()).chainId,
-        verifyingContract: contract.address,
+        chainId: (await contract.runner.provider.getNetwork()).chainId,
+        verifyingContract: await contract.getAddress(),
       };
 
       const types = {
@@ -1319,18 +1317,18 @@ describe('USDO', () => {
       spender: string;
       value: number;
       nonce: number;
-      deadline: number | BigNumber;
+      deadline: number | bigint;
     }
 
     const signTypedData = async (
-      signer: SignerWithAddress,
+      signer: HardhatEthersSigner,
       domain: TypedDataDomain,
       types: Record<string, Array<TypedDataField>>,
       message: Message,
     ) => {
-      const signature = await signer._signTypedData(domain, types, message);
+      const signature = await signer.signTypedData(domain, types, message);
 
-      return splitSignature(signature);
+      return ethers.Signature.from(signature);
     };
 
     it('initializes nonce at 0', async () => {
@@ -1340,17 +1338,17 @@ describe('USDO', () => {
 
     it('returns the correct domain separator', async () => {
       const { contract } = await loadFixture(deployUSDOFixture);
-      const chainId = (await contract.provider.getNetwork()).chainId;
+      const chainId = (await contract.runner.provider.getNetwork()).chainId;
 
-      const expected = keccak256(
-        defaultAbiCoder.encode(
+      const expected = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
           ['bytes32', 'bytes32', 'bytes32', 'uint256', 'address'],
           [
-            id('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'),
-            id(await contract.name()),
-            id('1'),
+            ethers.id('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'),
+            ethers.id(await contract.name()),
+            ethers.id('1'),
             chainId,
-            contract.address,
+            await contract.getAddress(),
           ],
         ),
       );
@@ -1361,7 +1359,7 @@ describe('USDO', () => {
       const { contract, owner, acc1: spender } = await loadFixture(deployUSDOFixture);
       const value = 100;
       const nonce = await contract.nonces(owner.address);
-      const deadline = MaxUint256;
+      const deadline = ethers.MaxUint256;
 
       const { domain, types, message } = await buildData(contract, owner, spender, value, nonce, deadline);
       const { v, r, s } = await signTypedData(owner, domain, types, message);
@@ -1377,7 +1375,7 @@ describe('USDO', () => {
       const { contract, owner, acc1: spender } = await loadFixture(deployUSDOFixture);
       const value = 100;
       const nonce = await contract.nonces(owner.address);
-      const deadline = MaxUint256;
+      const deadline = ethers.MaxUint256;
 
       const { domain, types, message } = await buildData(contract, owner, spender, value, nonce, deadline);
       const { v, r, s } = await signTypedData(owner, domain, types, message);
@@ -1394,7 +1392,7 @@ describe('USDO', () => {
       const { contract, owner, acc1: spender, acc2: otherAcc } = await loadFixture(deployUSDOFixture);
       const value = 100;
       const nonce = await contract.nonces(owner.address);
-      const deadline = MaxUint256;
+      const deadline = ethers.MaxUint256;
 
       const { domain, types, message } = await buildData(contract, owner, spender, value, nonce, deadline);
       const { v, r, s } = await signTypedData(otherAcc, domain, types, message);
