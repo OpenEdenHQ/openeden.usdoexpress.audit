@@ -6,6 +6,8 @@ Smart contracts for the USDO stablecoin protocol: the rebasing `USDO` token, the
 
 Deployed contract addresses for all networks (mainnet + testnet) are in [`deployed-addresses.md`](./deployed-addresses.md).
 
+`contracts/tokens/USDO.sol` is the implementation running on Ethereum, Base, BNB Chain and Arbitrum. USDO on Kaia, Plume and Plasma runs a later implementation that adds a `totalSupplyCap`; that version is not included here.
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.

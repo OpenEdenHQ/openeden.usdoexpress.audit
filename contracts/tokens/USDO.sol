@@ -52,9 +52,6 @@ contract USDO is
     // Mapping of nonces per address
     mapping(address => CountersUpgradeable.Counter) private _nonces;
 
-    // Total supply cap
-    uint256 private _totalSupplyCap;
-
     // Permit typehash constant
     bytes32 private constant _PERMIT_TYPEHASH =
         keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
@@ -73,7 +70,6 @@ contract USDO is
     event BonusMultiplier(uint256 indexed value);
     event Mint(address indexed to, uint256 amount);
     event Burn(address indexed from, uint256 amount);
-    event TotalSupplyCapUpdated(uint256 indexed oldCap, uint256 indexed newCap);
 
     /**
      * Standard ERC20 Errors
@@ -96,7 +92,6 @@ contract USDO is
     error USDOBannedSender(address sender);
     error USDOInvalidBlockedAccount(address account);
     error USDOPausedTransfers();
-    error USDOExceedsTotalSupplyCap(uint256 newTotalSupply, uint256 totalSupplyCap);
 
     /**
      * @notice Initializes the contract.
@@ -152,14 +147,6 @@ contract USDO is
      */
     function decimals() external pure returns (uint8) {
         return 18;
-    }
-
-    /**
-     * @notice Returns the total supply cap.
-     * @return The total supply cap.
-     */
-    function totalSupplyCap() external view returns (uint256) {
-        return _totalSupplyCap;
     }
 
     /**
@@ -221,21 +208,6 @@ contract USDO is
     }
 
     /**
-     * @notice Checks if the mint is available.
-     * @param amount The amount of tokens to mint.
-     * @return bool Whether the new mint is allowed.
-     * @return uint256 The amount of USDO that can be minted.
-     * @return uint256 The amount of shares that can be minted.
-     */
-    function checkNewTotalSupply(uint256 amount) public view returns (bool, uint256, uint256) {
-        uint256 shares = convertToShares(amount);
-
-        uint256 newTotalSupply = convertToTokens(_totalShares + shares);
-
-        return (newTotalSupply <= _totalSupplyCap, newTotalSupply, shares);
-    }
-
-    /**
      * @dev Private function that mints a specified number of tokens to the given address.
      * Creates `amount` tokens and assigns them to `account`, increasing
      * the total supply.
@@ -259,11 +231,7 @@ contract USDO is
 
         _beforeTokenTransfer(address(0), to, amount);
 
-        (bool isAllowed, uint256 newTotalSupply, uint256 shares) = checkNewTotalSupply(amount);
-        if (!isAllowed) {
-            revert USDOExceedsTotalSupplyCap(newTotalSupply, _totalSupplyCap);
-        }
-
+        uint256 shares = convertToShares(amount);
         _totalShares += shares;
 
         unchecked {
@@ -524,12 +492,6 @@ contract USDO is
             revert USDOInvalidBonusMultiplier(_bonusMultiplier);
         }
 
-        // Check if new multiplier would cause total supply to exceed cap
-        uint256 newTotalSupply = (_totalShares * _bonusMultiplier) / _BASE;
-        if (newTotalSupply > _totalSupplyCap) {
-            revert USDOExceedsTotalSupplyCap(newTotalSupply, _totalSupplyCap);
-        }
-
         bonusMultiplier = _bonusMultiplier;
 
         emit BonusMultiplier(_bonusMultiplier);
@@ -787,20 +749,9 @@ contract USDO is
     }
 
     /**
-     * @notice Updates the total supply cap.
-     * @dev This function can only be called by DEFAULT_ADMIN_ROLE.
-     * @param newCap The new total supply cap.
-     */
-    function updateTotalSupplyCap(uint256 newCap) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        uint256 oldCap = _totalSupplyCap;
-        _totalSupplyCap = newCap;
-        emit TotalSupplyCapUpdated(oldCap, newCap);
-    }
-
-    /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
-    uint256[41] private __gap;
+    uint256[42] private __gap;
 }

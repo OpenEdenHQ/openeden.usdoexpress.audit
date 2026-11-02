@@ -78,8 +78,6 @@ describe('USDOExpress', function () {
       initializer: 'initialize',
     })) as USDO;
 
-    await usdo.updateTotalSupplyCap(_10M);
-
     const MockUSDC = await ethers.getContractFactory('MockUSDC');
     usdc = await MockUSDC.deploy();
 
@@ -938,41 +936,6 @@ describe('USDOExpress', function () {
     this.beforeEach(async function () {
       mintAmount = ethers.parseUnits('1000', 6); // 1K USDC
       await usdc.transfer(whitelistedUser.address, mintAmount);
-    });
-
-    it('should fail to mint more than cap', async function () {
-      // V2: Set cap on USDO token (not USDOExpressV2) as the check is now centralized in USDO
-      const lowCap = ethers.parseUnits('500', 18); // 500 USDO
-      await usdo.updateTotalSupplyCap(lowCap);
-      await usdc.connect(whitelistedUser).approve(await usdoExpress.getAddress(), mintAmount);
-
-      // Calculate how much USDO would be minted
-      const { usdoAmtCurr } = await usdoExpress.previewMint(await usdc.getAddress(), mintAmount);
-
-      // Verify the mint would exceed the cap
-      expect(usdoAmtCurr).to.be.gt(lowCap);
-
-      // V2: Attempt to mint should fail with error from USDO contract
-      await expect(
-        usdoExpress.connect(whitelistedUser).instantMint(await usdc.getAddress(), whitelistedUser.address, mintAmount),
-      ).to.be.revertedWithCustomError(usdo, 'USDOExceedsTotalSupplyCap');
-    });
-
-    it('should allow minting up to cap', async function () {
-      // V2: Set cap on USDO token (not USDOExpressV2)
-      const cap = ethers.parseUnits('2000', 18); // 2000 USDO
-      await usdo.updateTotalSupplyCap(cap);
-
-      // Calculate how much USDO would be minted
-      const { usdoAmtCurr } = await usdoExpress.previewMint(await usdc.getAddress(), mintAmount);
-
-      // Verify the mint would be within the cap
-      expect(usdoAmtCurr).to.be.lt(cap);
-
-      // Attempt to mint should succeed
-      await expect(
-        usdoExpress.connect(whitelistedUser).instantMint(await usdc.getAddress(), whitelistedUser.address, mintAmount),
-      ).to.not.be.revertedWithCustomError(usdo, 'USDOExceedsTotalSupplyCap');
     });
 
     it('should fail to mint less than first deposit', async function () {

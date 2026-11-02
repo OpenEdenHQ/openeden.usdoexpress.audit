@@ -32,7 +32,6 @@ describe('cUSDO', () => {
     });
 
     // Set a high cap to allow initial minting
-    await USDOContract.updateTotalSupplyCap(ethers.parseUnits('10000000000')); // 10 billion USDO
 
     await USDOContract.grantRole(roles.MINTER, owner.address);
     await USDOContract.grantRole(roles.MULTIPLIER, owner.address);
